@@ -34,7 +34,18 @@ if(ENABLE_QT)
   )
 endif()
 
-target_sources(${CMAKE_PROJECT_NAME} PRIVATE src/plugin-main.cpp src/exp-filter.cpp src/exp-filter.hpp)
+target_sources(
+  ${CMAKE_PROJECT_NAME}
+  PRIVATE
+    src/plugin-main.cpp
+    src/exp-filter.cpp
+    src/exp-filter.hpp
+    src/format.hpp
+    src/meter.cpp
+    src/meter.hpp
+    src/ui/exp-dock.cpp
+    src/ui/exp-dock.hpp
+)
 
 # HUD reading core: plain C++, no OBS dependency, so the CLI and tests can use it too.
 add_library(expmeter-core STATIC)

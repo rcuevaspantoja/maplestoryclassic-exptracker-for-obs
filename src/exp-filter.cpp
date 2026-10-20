@@ -1,7 +1,7 @@
 #include "exp-filter.hpp"
 
 #include "hud/hud_reader.hpp"
-#include "stats/session.hpp"
+#include "meter.hpp"
 
 #include <obs-module.h>
 #include <plugin-support.h>
@@ -9,7 +9,6 @@
 #include <util/platform.h>
 
 #include <algorithm>
-#include <cmath>
 #include <atomic>
 #include <condition_variable>
 #include <cstdio>
@@ -26,30 +25,6 @@ constexpr uint64_t kReadIntervalNs = 500'000'000ULL;     // while the HUD is vis
 constexpr uint64_t kSearchIntervalNs = 2'000'000'000ULL; // while it is not (full searches cost more)
 constexpr uint32_t kMaxBandHeight = 300;                 // the HUD lives in the bottom ~100px
 constexpr uint64_t kScaleSearchIntervalNs = 10'000'000'000ULL;
-constexpr int64_t kSummaryIntervalMs = 30'000;
-
-// 1234567 -> "1,234,567"
-std::string formatNumber(int64_t value)
-{
-	std::string digits = std::to_string(value < 0 ? -value : value);
-	for (int i = static_cast<int>(digits.size()) - 3; i > 0; i -= 3)
-		digits.insert(static_cast<size_t>(i), ",");
-	return value < 0 ? "-" + digits : digits;
-}
-
-// 4350.0 -> "1:12:30", 75.0 -> "1:15"
-std::string formatDuration(double seconds)
-{
-	const int64_t total = std::max<int64_t>(0, std::llround(seconds));
-	char out[32];
-	if (total >= 3600)
-		std::snprintf(out, sizeof(out), "%lld:%02lld:%02lld", static_cast<long long>(total / 3600),
-			      static_cast<long long>(total / 60 % 60), static_cast<long long>(total % 60));
-	else
-		std::snprintf(out, sizeof(out), "%lld:%02lld", static_cast<long long>(total / 60),
-			      static_cast<long long>(total % 60));
-	return out;
-}
 
 // One copied strip from the bottom of the frame, handed to the worker thread.
 struct Frame {
@@ -196,19 +171,8 @@ private:
 		const double ms = (os_gettime_ns() - start) / 1e6;
 		hud_visible_ = reading.status != expmeter::ReadStatus::HudNotFound;
 
-		const int64_t now_ms = static_cast<int64_t>(start / 1'000'000);
-		expmeter::ReadingEvent event = expmeter::ReadingEvent::NoChange;
-		if (reading.status == expmeter::ReadStatus::Ok)
-			event = session_.onReading(now_ms, reading.exp, reading.percent_x100, reading.level);
-		else
-			session_.onNoReading(now_ms);
-
+		expmeter::Meter::instance().onFrame(reading, obs_source_get_name(context_));
 		logStatusChange(reading, frame, ms);
-		logEvent(event, reading);
-		if (now_ms - last_summary_ms_ >= kSummaryIntervalMs) {
-			last_summary_ms_ = now_ms;
-			logSummary(session_.stats(now_ms));
-		}
 	}
 
 	// Logs when the reader starts or stops seeing the HUD, not every reading.
@@ -225,35 +189,6 @@ private:
 		} else {
 			obs_log(LOG_INFO, "[%s] %s (%.1f ms)", obs_source_get_name(context_), status.c_str(), ms);
 		}
-	}
-
-	// Gains are summarized periodically; everything unusual is logged as it happens.
-	void logEvent(expmeter::ReadingEvent event, const expmeter::HudReading &reading)
-	{
-		using expmeter::ReadingEvent;
-		if (event != ReadingEvent::Baseline && event != ReadingEvent::LevelUp && event != ReadingEvent::Loss &&
-		    event != ReadingEvent::Rejected)
-			return;
-		obs_log(LOG_INFO, "[%s] %s: exp=%s pct=%.2f lv=%d", obs_source_get_name(context_),
-			expmeter::eventName(event), formatNumber(reading.exp).c_str(), reading.percent(),
-			reading.level);
-	}
-
-	void logSummary(const expmeter::SessionStats &s)
-	{
-		if (!s.has_reading)
-			return;
-		const std::string eta = s.eta_seconds ? formatDuration(*s.eta_seconds) : std::string("-");
-		const std::string required = s.required_exp ? formatNumber(static_cast<int64_t>(*s.required_exp))
-							    : std::string("?");
-		obs_log(LOG_INFO,
-			"[%s] session %s%s | %s EXP | %s EXP/min (last 5 min) | %s EXP/min avg | lv %d %.2f%% of %s | "
-			"next level in %s",
-			obs_source_get_name(context_), formatDuration(s.active_ms / 1000.0).c_str(),
-			s.hud_visible ? "" : " (paused: HUD not visible)", formatNumber(s.session_exp).c_str(),
-			s.rate_ready ? formatNumber(std::llround(s.exp_per_min)).c_str() : "-",
-			s.rate_ready ? formatNumber(std::llround(s.session_exp_per_min)).c_str() : "-", s.level,
-			s.percent_x100 / 100.0, required.c_str(), eta.c_str());
 	}
 
 	obs_source_t *context_;
@@ -277,9 +212,7 @@ private:
 
 	// Worker thread only.
 	expmeter::HudReader reader_;
-	expmeter::Session session_;
 	std::string last_status_;
-	int64_t last_summary_ms_ = 0;
 	uint64_t last_scale_search_ns_ = 0;
 
 	std::thread worker_; // last, so everything above exists before the thread starts
@@ -310,7 +243,7 @@ void filterRender(void *data, gs_effect_t *)
 void registerExpFilter()
 {
 	obs_source_info info = {};
-	info.id = "exp_meter_filter";
+	info.id = kExpFilterId;
 	info.type = OBS_SOURCE_TYPE_FILTER;
 	info.output_flags = OBS_SOURCE_VIDEO;
 	info.get_name = filterName;

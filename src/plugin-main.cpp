@@ -20,6 +20,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <plugin-support.h>
 
 #include "exp-filter.hpp"
+#include "ui/exp-dock.hpp"
 
 OBS_DECLARE_MODULE()
 OBS_MODULE_USE_DEFAULT_LOCALE(PLUGIN_NAME, "en-US")
@@ -41,7 +42,14 @@ bool obs_module_load(void)
 	return true;
 }
 
+// Docks need the OBS main window, which is ready once all modules are loaded.
+void obs_module_post_load(void)
+{
+	registerExpDock();
+}
+
 void obs_module_unload(void)
 {
+	unregisterExpDock();
 	obs_log(LOG_INFO, "EXP Meter unloaded");
 }

@@ -7,7 +7,7 @@ An **OBS Studio** plugin built exclusively for **MapleStory Classic** streamers.
 - **Time to level up**: an estimate based on your current pace
 - **Training-spot comparison**: measure a map, start a new measurement on another map, and see which one pays better
 
-> Status: **Stage 5 – Dock (next).** The "EXP Meter" filter reads the HUD live (native or 1920×1080) and logs session stats (EXP/min, session EXP, time to level) every 30 s. Add it by hand for now: right-click your game capture → *Filters* → *+* → *EXP Meter*. See [Roadmap](#roadmap).
+> Status: **Stage 6 – Overlay (next).** Open **Docks → EXP Meter** in OBS, pick your game capture, and the live stats appear there (EXP/min, session EXP, time to level), with Pause and Reset. See [Roadmap](#roadmap).
 
 ---
 
@@ -144,7 +144,7 @@ Development is incremental. Each stage ends with something you can check before 
 | **2. Offline HUD reading** | Locator + OCR + parser library with tests; `expmeter-cli image.png` | `ctest` passes; the CLI prints `exp=74660 pct=28.00 lv=39` for the reference image | ✅ Done |
 | **3. OBS filter** | Filter captures the HUD region and logs readings | Correct readings in the OBS log, from the reference image or the live game | ✅ Done |
 | **4. Stats engine** | Rates, ETA, level-up, loss, auto-pause, with tests | Simulated tests pass; live values look sane | ✅ Done |
-| **5. Dock** | Source selector, status, stats, Start/Pause/Reset | Works without adding filters by hand | ⚪ |
+| **5. Dock** | Source selector, status, stats, Start/Pause/Reset | Works without adding filters by hand | ✅ Done |
 | **6. Overlay** | Local server, themes, *Add overlay to scene*, custom CSS | Overlay visible in the scene and restyled by CSS | ⚪ |
 | **7. Spot comparison** | Named measurements, history, comparison table, hotkey | Measure two maps and compare them in the dock | ⚪ |
 | **8. Distribution** | Windows installer, session persistence, optional `.txt` output, user guide | Clean install, then repeat the checks from stages 3–7 | ⚪ |
