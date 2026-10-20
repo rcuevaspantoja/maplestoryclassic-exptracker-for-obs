@@ -6,7 +6,7 @@ An **OBS Studio** plugin built exclusively for **MapleStory Classic** streamers.
 - **Session EXP**: how much EXP you have earned since you started measuring
 - **Time to level up**: an estimate based on your current pace
 
-> Status: **Stage 8 – Distribution (next).** Open **Docks → EXP Meter** in OBS, pick your game capture, and click **Add to scene** to show EXP/min, EXP/hour, session EXP and time to level on stream. See [Roadmap](#roadmap).
+> Status: **Stage 7 – Distribution (next).** Open **Docks → EXP Meter** in OBS, pick your game capture, and click **Add to scene** to show EXP/min, EXP/hour, session EXP and time to level on stream. See [Roadmap](#roadmap).
 
 ---
 
@@ -35,9 +35,8 @@ The plugin:
 2. Finds the `EXP.` label in the bottom part of the frame, then reads the numbers next to it and the `LV.` value.
 3. Feeds those readings into a **stats engine** that calculates rates, totals and ETA.
 4. Publishes the results to:
-   - an **overlay** (a Browser Source in your scene, which you can style with CSS),
-   - a **dock panel** inside OBS (source, status and controls),
-   - optionally, **text files** for other tools.
+   - an **overlay** (a Browser Source in your scene, which you can style with CSS), and
+   - a **dock panel** inside OBS (source, status and controls).
 
 ---
 
@@ -93,9 +92,9 @@ The plugin:
 ```
 Game Capture ──("EXP Meter" filter)──► HUD reader ──► Stats engine ──► Shared state
                                        (locate + OCR)  (EXP/min, ETA,      │
-                                                        session, history)  │
-                                                   ┌───────────────────────┼──────────────┐
-                                             Local HTTP server         Qt dock      (opt.) .txt
+                                                        session)           │
+                                                   ┌───────────────────────┴─────────────┐
+                                             Local HTTP server                        Qt dock
                                             (overlay + JSON)
 ```
 
@@ -130,7 +129,7 @@ Development is incremental. Each stage ends with something you can check before 
 | **4. Stats engine** | Rates, ETA, level-up, loss, auto-pause, with tests | Simulated tests pass; live values look sane | ✅ Done |
 | **5. Dock** | Source selector, status, stats, Start/Pause/Reset | Works without adding filters by hand | ✅ Done |
 | **6. Overlay** | Local server, themes, *Add to scene*, custom CSS | Overlay visible in the scene and restyled by CSS | ✅ Done |
-| **8. Distribution** | Windows installer, session persistence, optional `.txt` output, user guide | Clean install, then repeat the checks from stages 3–6 | ⚪ |
+| **7. Distribution** | Windows installer, session persistence, user guide | Clean install, then repeat the checks from stages 3–6 | ⚪ |
 
 ---
 
@@ -243,7 +242,7 @@ Take captures **at the game's native size**, for example with OBS's *Screenshot 
 │   ├── plugin-main.cpp
 │   ├── exp-filter.cpp
 │   ├── hud/        (locator, glyph_ocr, glyphs, parser, render, hud_reader)
-│   ├── stats/      (session, history)
+│   ├── stats/      (session)
 │   ├── server/     (http server)
 │   └── ui/         (exp-dock)
 ├── data/
