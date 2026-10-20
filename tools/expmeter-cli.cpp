@@ -47,7 +47,7 @@ int main(int argc, char **argv)
 			++failures;
 		}
 		if (reading.location) {
-			std::printf("  label at (%d,%d) scale=%.2f match=%.3f\n", reading.location->x,
+			std::printf("  label at (%.2f,%.2f) scale=%.2f match=%.3f\n", reading.location->x,
 				    reading.location->y, reading.location->scale, reading.location->score);
 		}
 		if (!reading.raw_text.empty())

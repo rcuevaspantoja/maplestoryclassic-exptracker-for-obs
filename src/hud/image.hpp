@@ -31,6 +31,15 @@ struct ImageView {
 	}
 };
 
+// Owned, tightly packed RGBA image.
+struct RgbaImage {
+	int width = 0;
+	int height = 0;
+	std::vector<uint8_t> pixels;
+
+	ImageView view() const { return {pixels.data(), width, height, width * 4, PixelFormat::RGBA}; }
+};
+
 // Single-channel float image, values usually in [0, 1].
 struct FloatMap {
 	int width = 0;

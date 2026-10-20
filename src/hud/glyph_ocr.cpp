@@ -12,9 +12,6 @@ namespace {
 
 constexpr float kInkThreshold = 0.35f;  // a column with less ink than this is blank
 constexpr double kMinGlyphScore = 0.55; // below this, a column is skipped as noise
-// Level digits are crisp; an unknown digit (e.g. an 8 vs the 9 template) differs by
-// only ~3 of 49 pixels, so anything short of a near-exact match is rejected.
-constexpr double kLevelMinScore = 0.96;
 constexpr int kLevelMinOrangeRows = 4;
 
 struct Candidate {
@@ -80,18 +77,21 @@ OcrText decodeExpLine(const FloatMap &line)
 		}
 		out.text.push_back(best.glyph->ch);
 		out.confidence = std::min(out.confidence, best.score);
+		out.mean_score += best.score;
 		x = best.x + best.width + 1;
 		if (best.glyph->ch == ']')
 			break;
 	}
 	if (out.text.empty())
 		out.confidence = 0.0;
+	else
+		out.mean_score /= static_cast<double>(out.text.size());
 	return out;
 }
 
 OcrText readExpText(const ImageView &image, const HudLocation &location)
 {
-	const int x0 = location.x + glyphs::kTextOffsetX;
+	const int x0 = static_cast<int>(location.x) + glyphs::kTextOffsetX;
 	const int width = std::min(glyphs::kTextScanWidth, image.width - x0);
 	const int height = glyphs::kExpGlyphHeight + 2;
 	OcrText best;
@@ -100,7 +100,7 @@ OcrText readExpText(const ImageView &image, const HudLocation &location)
 		return best;
 
 	for (int dy = -1; dy <= 1; ++dy) {
-		const int y0 = location.y + glyphs::kTextOffsetY - 1 + dy;
+		const int y0 = static_cast<int>(location.y) + glyphs::kTextOffsetY - 1 + dy;
 		if (y0 < 0 || y0 + height > image.height)
 			continue;
 		FloatMap line(width, height);
@@ -121,10 +121,10 @@ OcrText readExpText(const ImageView &image, const HudLocation &location)
 	return best;
 }
 
-int readLevel(const ImageView &image, const HudLocation &location)
+int readLevel(const ImageView &image, const HudLocation &location, double min_score, double min_margin)
 {
-	const int scan_x0 = location.x + glyphs::kLevelScanOffsetX;
-	const int box_y0 = location.y + glyphs::kLevelBoxOffsetY;
+	const int scan_x0 = static_cast<int>(location.x) + glyphs::kLevelScanOffsetX;
+	const int box_y0 = static_cast<int>(location.y) + glyphs::kLevelBoxOffsetY;
 	if (scan_x0 < 0 || box_y0 < 0 || box_y0 + glyphs::kLevelBoxHeight > image.height)
 		return 0;
 	const int scan_x1 = std::min(image.width, scan_x0 + glyphs::kLevelScanWidth);
@@ -157,28 +157,43 @@ int readLevel(const ImageView &image, const HudLocation &location)
 
 	int level = 0;
 	for (int bx : box_starts) {
-		const int gx = bx + glyphs::kLevelGlyphInsetX;
-		const int gy = box_y0 + glyphs::kLevelGlyphInsetY;
-		char digit = 0;
-		double best = 0.0;
-		for (const auto &g : glyphs::kLevelGlyphs) {
-			double diff = 0.0;
-			for (int r = 0; r < glyphs::kLevelGlyphSize; ++r) {
-				for (int c = 0; c < glyphs::kLevelGlyphSize; ++c) {
-					int pr, pg, pb;
-					image.rgb(gx + c, gy + r, pr, pg, pb);
-					diff += std::fabs(whiteness(pr, pg, pb) - glyphs::cellValue(g.rows[r][c]));
+		// Best score per template, allowing one pixel of jitter for resampled HUDs.
+		std::vector<double> scores(glyphs::kLevelGlyphs.size(), 0.0);
+		for (size_t i = 0; i < glyphs::kLevelGlyphs.size(); ++i) {
+			const auto &g = glyphs::kLevelGlyphs[i];
+			for (int dy = -1; dy <= 1; ++dy) {
+				for (int dx = -1; dx <= 1; ++dx) {
+					const int gx = bx + glyphs::kLevelGlyphInsetX + dx;
+					const int gy = box_y0 + glyphs::kLevelGlyphInsetY + dy;
+					if (gx < 0 || gy < 0 || gx + glyphs::kLevelGlyphSize > image.width ||
+					    gy + glyphs::kLevelGlyphSize > image.height)
+						continue;
+					double diff = 0.0;
+					for (int r = 0; r < glyphs::kLevelGlyphSize; ++r) {
+						for (int c = 0; c < glyphs::kLevelGlyphSize; ++c) {
+							int pr, pg, pb;
+							image.rgb(gx + c, gy + r, pr, pg, pb);
+							diff += std::fabs(whiteness(pr, pg, pb) -
+									  glyphs::cellValue(g.rows[r][c]));
+						}
+					}
+					const double score =
+						1.0 - diff / (glyphs::kLevelGlyphSize * glyphs::kLevelGlyphSize);
+					scores[i] = std::max(scores[i], score);
 				}
 			}
-			const double score = 1.0 - diff / (glyphs::kLevelGlyphSize * glyphs::kLevelGlyphSize);
-			if (score > best) {
-				best = score;
-				digit = g.ch;
-			}
 		}
-		if (best < kLevelMinScore)
+		size_t best = 0;
+		for (size_t i = 1; i < scores.size(); ++i)
+			if (scores[i] > scores[best])
+				best = i;
+		double second = 0.0;
+		for (size_t i = 0; i < scores.size(); ++i)
+			if (i != best)
+				second = std::max(second, scores[i]);
+		if (scores[best] < min_score || scores[best] - second < min_margin)
 			return 0;
-		level = level * 10 + (digit - '0');
+		level = level * 10 + (glyphs::kLevelGlyphs[best].ch - '0');
 	}
 	return level;
 }

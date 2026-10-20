@@ -4,6 +4,7 @@
 
 #include <doctest.h>
 
+#include <algorithm>
 #include <string>
 
 template<> struct doctest::StringMaker<expmeter::ReadStatus> {
@@ -75,6 +76,35 @@ ImageFile withExpText(const std::string &text)
 	return image;
 }
 
+// Area-averaged resize, like a capture that was scaled by a screenshot tool or a scene.
+ImageFile resized(const ImageFile &src, double scale)
+{
+	constexpr int kSamples = 4;
+	ImageFile out;
+	out.width = static_cast<int>(src.width * scale);
+	out.height = static_cast<int>(src.height * scale);
+	out.pixels.resize(static_cast<size_t>(out.width) * out.height * 4);
+	for (int y = 0; y < out.height; ++y) {
+		for (int x = 0; x < out.width; ++x) {
+			int sum[3] = {0, 0, 0};
+			for (int sy = 0; sy < kSamples; ++sy) {
+				for (int sx = 0; sx < kSamples; ++sx) {
+					const int u = std::min(src.width - 1,
+							       static_cast<int>((x + (sx + 0.5) / kSamples) / scale));
+					const int v = std::min(src.height - 1,
+							       static_cast<int>((y + (sy + 0.5) / kSamples) / scale));
+					const uint8_t *p = &src.pixels[(static_cast<size_t>(v) * src.width + u) * 4];
+					for (int c = 0; c < 3; ++c)
+						sum[c] += p[c];
+				}
+			}
+			setPixel(out, x, y, sum[0] / (kSamples * kSamples), sum[1] / (kSamples * kSamples),
+				 sum[2] / (kSamples * kSamples));
+		}
+	}
+	return out;
+}
+
 } // namespace
 
 TEST_CASE("reads the 1366px game capture")
@@ -137,14 +167,80 @@ TEST_CASE("reads a tight crop of the EXP bar without the level")
 	CHECK(reading.level == 0);
 }
 
-TEST_CASE("a downscaled capture is detected but not read")
+TEST_CASE("reads the game stretched to 1920x1080")
 {
-	const ImageFile image = load("samples/Screenshot_15.png");
+	// MapleStory Classic stretches its 1366x768 canvas by ~1.406 at 1080p.
+	const ImageFile image = load("samples/Screenshot 2026-10-19 23-30-48.png");
+	HudReader reader;
+	const HudReading reading = reader.read(image.view());
+	CHECK(reading.raw_text == "74,965[28.11%]");
+	REQUIRE(reading.status == ReadStatus::Ok);
+	CHECK(reading.exp == 74965);
+	CHECK(reading.percent_x100 == 2811);
+	CHECK(reading.level == 39);
+	REQUIRE(reading.location);
+	CHECK(reading.location->scale == doctest::Approx(1.406).epsilon(0.01));
+
+	// The next frame reuses the refined location and still reads.
+	const HudReading again = reader.read(image.view(), false);
+	CHECK(again.status == ReadStatus::Ok);
+	CHECK(again.exp == 74965);
+}
+
+TEST_CASE("reads a native capture stretched like the game does at 1080p")
+{
+	// Screenshot_19 is the 1366px canvas; the game draws it 1920 / 1366 = 1.4056x larger.
+	const ImageFile image = resized(load("samples/Screenshot_19.png"), 1920.0 / 1366.0);
+	HudReader reader;
+	const HudReading reading = reader.read(image.view());
+	CHECK(reading.raw_text == "74,710[28.01%]");
+	REQUIRE(reading.status == ReadStatus::Ok);
+	CHECK(reading.exp == 74710);
+	CHECK(reading.percent_x100 == 2801);
+	CHECK(reading.level == 39);
+}
+
+TEST_CASE("reads other upscaled captures")
+{
+	// Only 1920x1080 (1.406x) is a supported setup; these check the method is not tuned to
+	// a single scale. Stretches below ~1.4x (e.g. 1.25x) are not reliable yet.
+	const ImageFile native = load("samples/Screenshot_17.png");
+	for (double scale : {1.5, 1.75, 2.0}) {
+		CAPTURE(scale);
+		const ImageFile image = resized(native, scale);
+		HudReader reader;
+		const HudReading reading = reader.read(image.view());
+		CHECK(reading.raw_text == "74,660[28.00%]");
+		REQUIRE(reading.status == ReadStatus::Ok);
+		CHECK(reading.exp == 74660);
+		CHECK(reading.percent_x100 == 2800);
+		// When the digits are not clear enough the level is unknown, never a wrong number.
+		CHECK((reading.level == 39 || reading.level == 0));
+	}
+}
+
+TEST_CASE("a shrunk capture is detected but not read")
+{
+	const ImageFile image = resized(load("samples/Screenshot_17.png"), 0.75);
 	HudReader reader;
 	const HudReading reading = reader.read(image.view());
 	CHECK(reading.status == ReadStatus::UnsupportedScale);
 	REQUIRE(reading.location);
-	CHECK(reading.location->scale < 0.9);
+	CHECK(reading.location->scale == doctest::Approx(0.75).epsilon(0.1));
+}
+
+TEST_CASE("a known scale is found again without the all-scales search")
+{
+	const ImageFile image = load("samples/Screenshot 2026-10-19 23-30-48.png");
+	HudReader reader;
+	REQUIRE(reader.read(image.view()).status == ReadStatus::Ok);
+
+	// HUD hidden (e.g. cash shop), then back: no all-scales search is allowed.
+	ImageFile blank = image;
+	for (size_t i = 0; i < blank.pixels.size(); i += 4)
+		blank.pixels[i] = blank.pixels[i + 1] = blank.pixels[i + 2] = 20;
+	CHECK(reader.read(blank.view(), false).status == ReadStatus::HudNotFound);
+	CHECK(reader.read(image.view(), false).status == ReadStatus::Ok);
 }
 
 TEST_CASE("an image without HUD is not read")

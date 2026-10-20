@@ -34,13 +34,13 @@ if(ENABLE_QT)
   )
 endif()
 
-target_sources(${CMAKE_PROJECT_NAME} PRIVATE src/plugin-main.cpp)
+target_sources(${CMAKE_PROJECT_NAME} PRIVATE src/plugin-main.cpp src/exp-filter.cpp src/exp-filter.hpp)
 
 # HUD reading core: plain C++, no OBS dependency, so the CLI and tests can use it too.
 add_library(expmeter-core STATIC)
 target_sources(
   expmeter-core
-  PRIVATE src/hud/glyph_ocr.cpp src/hud/hud_reader.cpp src/hud/locator.cpp src/hud/parser.cpp
+  PRIVATE src/hud/glyph_ocr.cpp src/hud/hud_reader.cpp src/hud/locator.cpp src/hud/parser.cpp src/hud/render.cpp
   PUBLIC
     src/hud/glyph_ocr.hpp
     src/hud/glyphs.hpp
@@ -48,6 +48,7 @@ target_sources(
     src/hud/image.hpp
     src/hud/locator.hpp
     src/hud/parser.hpp
+    src/hud/render.hpp
 )
 target_include_directories(expmeter-core PUBLIC src)
 target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE expmeter-core)

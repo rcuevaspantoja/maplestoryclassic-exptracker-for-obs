@@ -7,7 +7,7 @@ An **OBS Studio** plugin built exclusively for **MapleStory Classic** streamers.
 - **Time to level up**: an estimate based on your current pace
 - **Training-spot comparison**: measure a map, start a new measurement on another map, and see which one pays better
 
-> Status: **Stage 2 – Offline HUD reading (in review).** The plugin loads in OBS, and the HUD reader works offline (CLI + tests). See [Roadmap](#roadmap).
+> Status: **Stage 4 – Stats engine (next).** The "EXP Meter" filter reads the HUD live (native or 1920×1080) and logs every change. Add it by hand for now: right-click your game capture → *Filters* → *+* → *EXP Meter*. See [Roadmap](#roadmap).
 
 ---
 
@@ -119,7 +119,8 @@ Game Capture ──("EXP Meter" filter)──► HUD reader ──► Stats engi
 |---|---|---|
 | Plugin entry | `src/plugin-main.cpp` | Registers the filter, dock and hotkeys, and starts the server |
 | Frame capture | `src/exp-filter.cpp` | Video filter. It passes the image through untouched. About every 500 ms it renders only the HUD region and copies it to the CPU asynchronously (`gs_texrender` → `gs_stage_texture` → `gs_stagesurface_map`), then hands it to a worker thread |
-| HUD locator | `src/hud/locator.*` | Finds the `EXP.` label template in the bottom of the frame, trying multiple scales, and caches its position |
+| HUD locator | `src/hud/locator.*` | Finds the `EXP.` label template in the bottom of the frame (native scale first, then the 1080p stretch, then all scales), refines the scale and sub-pixel position, and caches it |
+| HUD reader | `src/hud/hud_reader.*`, `src/hud/render.*` | Native HUDs are read directly. A stretched HUD is resampled back to native pixels, with the stretch calibrated once against the EXP text itself, and then read with the same exact decoder |
 | Glyph OCR | `src/hud/glyph_ocr.*`, `src/hud/glyphs.hpp` | Matches each character against the HUD pixel font, which is embedded in the code as bitmaps extracted from native captures. There is one set for the EXP text and one for the level digits in the orange boxes |
 | Parser | `src/hud/parser.*` | Turns `74.660 [28.00%]` into `exp = 74660, pct = 28.00`. A `.` or `,` before `[` is a thousands separator |
 | Stats engine | `src/stats/` | Pure C++ with no OBS dependency, so it is unit-testable. Handles rates, totals, ETA, level-ups, losses, auto-pause and measurement history |
@@ -140,8 +141,8 @@ Development is incremental. Each stage ends with something you can check before 
 |---|---|---|---|
 | **0. Definition** | This README | Review and approval | ✅ Done |
 | **1. Skeleton** | Template-based project that builds and loads in OBS; locales; CI | OBS log shows `EXP Meter loaded` | ✅ Done |
-| **2. Offline HUD reading** | Locator + OCR + parser library with tests; `expmeter-cli image.png` | `ctest` passes; the CLI prints `exp=74660 pct=28.00 lv=39` for the reference image | 🟡 In review |
-| **3. OBS filter** | Filter captures the HUD region and logs readings | Correct readings in the OBS log, from the reference image or the live game | ⚪ |
+| **2. Offline HUD reading** | Locator + OCR + parser library with tests; `expmeter-cli image.png` | `ctest` passes; the CLI prints `exp=74660 pct=28.00 lv=39` for the reference image | ✅ Done |
+| **3. OBS filter** | Filter captures the HUD region and logs readings | Correct readings in the OBS log, from the reference image or the live game | ✅ Done |
 | **4. Stats engine** | Rates, ETA, level-up, loss, auto-pause, with tests | Simulated tests pass; live values look sane | ⚪ |
 | **5. Dock** | Source selector, status, stats, Start/Pause/Reset | Works without adding filters by hand | ⚪ |
 | **6. Overlay** | Local server, themes, *Add overlay to scene*, custom CSS | Overlay visible in the scene and restyled by CSS | ⚪ |
@@ -154,6 +155,7 @@ Development is incremental. Each stage ends with something you can check before 
 
 - **OBS Studio** 30 or newer (Windows x64)
 - MapleStory Classic captured with a **Game Capture** or **Window Capture** source, with the HUD visible
+- **Game resolution: 1920×1080** (recommended and tested) or the game's native 1366×768 / 800×600. At 1080p the game stretches its 1366×768 canvas by 1.406×; EXP Meter measures that stretch and reads the HUD back at native size. Other resolutions are not supported: shrunk HUDs are rejected, and other stretches are not validated.
 - For building:
   - Visual Studio 2022 or 2026 (or Build Tools) with the "Desktop development with C++" workload
   - CMake 3.28 or newer
@@ -211,12 +213,12 @@ Current coverage:
 
 | Font | Have (native) | Missing |
 |---|---|---|
-| EXP digits and symbols (`0-9 , . [ ] %`) | all except 9. The 9 is the 6 rotated 180°, which holds for every other symmetric pair in this font | a native **9** to confirm it |
+| EXP digits and symbols (`0-9 , . [ ] %`) | all (the 9 was confirmed in a 1080p capture) | — |
 | Level digits (white on orange boxes) | 1, 3, 9 | **0, 2, 4, 5, 6, 7, 8**. Until a digit has a template, a level containing it is reported as unknown, never guessed |
 
 Also useful:
 
-- The HUD at other game resolutions
+- More **1920×1080** captures with different EXP values (each one becomes a regression test)
 - Captures around a level-up and after a death
 
 Take captures **at the game's native size**, for example with OBS's *Screenshot (Source)* on the Game Capture. Use PNG, not JPG. Put the visible values in the filename, for example `exp_123456_45.67_lv52.png`. These files also become test fixtures.
@@ -231,7 +233,7 @@ Take captures **at the game's native size**, for example with OBS's *Screenshot 
 ├── src/
 │   ├── plugin-main.cpp
 │   ├── exp-filter.cpp
-│   ├── hud/        (locator, glyph_ocr, glyphs, parser, hud_reader)
+│   ├── hud/        (locator, glyph_ocr, glyphs, parser, render, hud_reader)
 │   ├── stats/      (session, history)
 │   ├── server/     (http server)
 │   └── ui/         (exp-dock)

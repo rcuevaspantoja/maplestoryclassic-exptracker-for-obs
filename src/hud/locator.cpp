@@ -1,6 +1,7 @@
 #include "locator.hpp"
 
 #include "glyphs.hpp"
+#include "render.hpp"
 
 #include <cmath>
 #include <vector>
@@ -22,29 +23,10 @@ FloatMap whitenessMap(const ImageView &image, int x0, int y0, int x1, int y1)
 	return map;
 }
 
-// Renders the native label template at `scale`, averaging each output pixel over a
-// supersampled grid so it looks like a downscaled/upscaled capture would.
-FloatMap renderLabel(double scale)
+const FloatMap &labelBitmap()
 {
-	const int w = std::max(3, static_cast<int>(std::lround(glyphs::kLabelWidth * scale)));
-	const int h = std::max(3, static_cast<int>(std::lround(glyphs::kLabelHeight * scale)));
-	constexpr int kSamples = 4;
-	FloatMap out(w, h);
-	for (int y = 0; y < h; ++y) {
-		for (int x = 0; x < w; ++x) {
-			float sum = 0.0f;
-			for (int sy = 0; sy < kSamples; ++sy) {
-				for (int sx = 0; sx < kSamples; ++sx) {
-					const int u = static_cast<int>((x + (sx + 0.5) / kSamples) / scale);
-					const int v = static_cast<int>((y + (sy + 0.5) / kSamples) / scale);
-					if (u < glyphs::kLabelWidth && v < glyphs::kLabelHeight)
-						sum += glyphs::cellValue(glyphs::kLabel[v][u]);
-				}
-			}
-			out.at(x, y) = sum / (kSamples * kSamples);
-		}
-	}
-	return out;
+	static const FloatMap bitmap = bitmapFromRows(glyphs::kLabel);
+	return bitmap;
 }
 
 } // namespace
@@ -53,8 +35,12 @@ const FloatMap &Locator::templateFor(double scale)
 {
 	const int key = static_cast<int>(std::lround(scale * 100));
 	auto it = templates_.find(key);
-	if (it == templates_.end())
-		it = templates_.emplace(key, renderLabel(key / 100.0)).first;
+	if (it == templates_.end()) {
+		const double s = key / 100.0;
+		const int w = std::max(3, static_cast<int>(std::lround(glyphs::kLabelWidth * s)));
+		const int h = std::max(3, static_cast<int>(std::lround(glyphs::kLabelHeight * s)));
+		it = templates_.emplace(key, renderScaled(labelBitmap(), s, 0.0, 0.0, w, h)).first;
+	}
 	return it->second;
 }
 
@@ -133,25 +119,62 @@ std::optional<HudLocation> Locator::search(const FloatMap &region, int offset_x,
 	return best;
 }
 
-std::optional<HudLocation> Locator::locate(const ImageView &image, const std::optional<HudLocation> &hint)
+HudLocation Locator::refine(const FloatMap &band, int band_top, const HudLocation &coarse)
+{
+	// Text is read ~140 native pixels right of the label, so the scale has to be good to
+	// about 1%. Try nearby scales and quarter-pixel offsets against the rendered label.
+	constexpr int kMargin = 2;
+	const int px = static_cast<int>(coarse.x) - kMargin;
+	const int py = static_cast<int>(coarse.y) - band_top - kMargin;
+	HudLocation best = coarse;
+	for (int step = -7; step <= 7; ++step) {
+		const double scale = coarse.scale + step * 0.01;
+		const int w = static_cast<int>(glyphs::kLabelWidth * scale) + 2 * kMargin;
+		const int h = static_cast<int>(glyphs::kLabelHeight * scale) + 2 * kMargin;
+		for (int oy = -4; oy <= 4; ++oy) {
+			for (int ox = -4; ox <= 4; ++ox) {
+				const FloatMap model = renderScaled(labelBitmap(), scale, kMargin + ox * 0.25,
+								    kMargin + oy * 0.25, w, h);
+				const double score = ncc(band, px, py, model);
+				if (score > best.score) {
+					best.score = score;
+					best.scale = scale;
+					best.x = px + kMargin + ox * 0.25;
+					best.y = py + band_top + kMargin + oy * 0.25;
+				}
+			}
+		}
+	}
+	return best;
+}
+
+std::optional<HudLocation> Locator::locate(const ImageView &image, const std::optional<HudLocation> &hint,
+					   bool allow_scale_search)
 {
 	if (!image.data || image.width <= 0 || image.height <= 0)
 		return std::nullopt;
 
 	if (hint) {
-		// Re-check the previous spot with a little slack; this is the common, cheap path.
+		// The HUD doesn't move, so re-checking the previous spot is the common, cheap path.
 		const int slack = 2;
-		const int margin = static_cast<int>(std::ceil(glyphs::kLabelWidth * hint->scale)) + slack;
-		const int x0 = std::max(0, hint->x - slack);
-		const int y0 = std::max(0, hint->y - slack);
-		const int x1 = std::min(image.width, hint->x + margin);
-		const int y1 = std::min(image.height, hint->y + margin);
+		const int hx = static_cast<int>(hint->x);
+		const int hy = static_cast<int>(hint->y);
+		const int margin = static_cast<int>(std::ceil(glyphs::kLabelWidth * hint->scale)) + slack + 1;
+		const int x0 = std::max(0, hx - slack);
+		const int y0 = std::max(0, hy - slack);
+		const int x1 = std::min(image.width, hx + margin);
+		const int y1 = std::min(image.height, hy + margin);
 		if (x1 > x0 && y1 > y0) {
 			const FloatMap region = whitenessMap(image, x0, y0, x1, y1);
 			auto found = search(region, x0, y0, hint->scale, 0, 0, region.width, region.height);
 			const double accept = hint->isNative() ? kNativeAcceptScore : kScaledAcceptScore;
-			if (found && found->score >= accept)
-				return found;
+			if (found && found->score >= accept) {
+				if (hint->isNative())
+					return found;
+				HudLocation same = *hint; // keep the refined sub-pixel position
+				same.score = found->score;
+				return same;
+			}
 		}
 	}
 
@@ -163,17 +186,24 @@ std::optional<HudLocation> Locator::locate(const ImageView &image, const std::op
 	if (native && native->score >= kNativeAcceptScore)
 		return native;
 
+	// Next, the scale we expect: the hint's, or the supported 1920x1080 stretch.
 	std::optional<HudLocation> best;
-	for (int pct = 50; pct <= 200; pct += 5) {
-		if (pct == 100)
-			continue;
-		auto found = search(band, 0, band_top, pct / 100.0, 0, 0, band.width, band.height);
-		if (found && (!best || found->score > best->score))
-			best = found;
+	const double expected_scale = hint && !hint->isNative() ? hint->scale : kFullHdScale;
+	best = search(band, 0, band_top, expected_scale, 0, 0, band.width, band.height);
+	if (best && best->score < kScaledAcceptScore)
+		best.reset();
+	if (!best && allow_scale_search) {
+		for (int pct = 50; pct <= 200; pct += 5) {
+			if (pct == 100)
+				continue;
+			auto found = search(band, 0, band_top, pct / 100.0, 0, 0, band.width, band.height);
+			if (found && (!best || found->score > best->score))
+				best = found;
+		}
 	}
-	if (best && best->score >= kScaledAcceptScore)
-		return best;
-	return std::nullopt;
+	if (!best || best->score < kScaledAcceptScore)
+		return std::nullopt;
+	return refine(band, band_top, *best);
 }
 
 } // namespace expmeter
