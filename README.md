@@ -7,7 +7,7 @@ An **OBS Studio** plugin built exclusively for **MapleStory Classic** streamers.
 - **Time to level up**: an estimate based on your current pace
 - **Training-spot comparison**: measure a map, start a new measurement on another map, and see which one pays better
 
-> Status: **Stage 4 – Stats engine (next).** The "EXP Meter" filter reads the HUD live (native or 1920×1080) and logs every change. Add it by hand for now: right-click your game capture → *Filters* → *+* → *EXP Meter*. See [Roadmap](#roadmap).
+> Status: **Stage 5 – Dock (next).** The "EXP Meter" filter reads the HUD live (native or 1920×1080) and logs session stats (EXP/min, session EXP, time to level) every 30 s. Add it by hand for now: right-click your game capture → *Filters* → *+* → *EXP Meter*. See [Roadmap](#roadmap).
 
 ---
 
@@ -92,14 +92,14 @@ The history persists across OBS restarts. You can delete single entries or clear
 
 | Term | Definition |
 |---|---|
-| **Reading** | One accepted capture of `(time, exp, percent, level)` from the HUD. A reading is accepted only if:<br>• its confidence is above the threshold,<br>• it is plausible compared with the previous reading,<br>• and the same value was read twice in a row. |
+| **Reading** | One accepted capture of `(time, exp, percent, level)` from the HUD. A reading is accepted only if:<br>• its confidence is above the threshold,<br>• the same value was read twice in a row,<br>• and its `exp ÷ percent` agrees with the required EXP implied by the previous readings (a misread digit breaks that agreement). A different value that keeps being read consistently (e.g. after switching characters) becomes the new baseline without counting as EXP. |
 | **Measurement** (session) | The time span between Start/Reset/New measurement and now. All "session" stats refer to the current measurement. |
 | **Session EXP** | Sum of the EXP gained during the measurement, **minus** any EXP lost (for example, on death). |
 | **EXP / min** | EXP gained in the averaging window ÷ active minutes in that window. The session average (session EXP ÷ session minutes) is also available. |
-| **Required EXP** | Total EXP needed for the current level. It comes from the built-in MapleStory Classic EXP table. If the level is unknown, it is estimated as `exp ÷ percent`. |
+| **Required EXP** | Total EXP needed for the current level, computed only from the HUD: every reading bounds it to `exp ÷ percent` (the percent has 2 decimals), and intersecting those bounds narrows it to within ~0.1%. No level table is needed; it restarts on every level-up. |
 | **Time to level (ETA)** | `(required EXP − current EXP) ÷ EXP per minute`. Shown as `—` until the rate is stable. |
-| **Level-up** | Detected when the level increases, or when the percent wraps from high to low. The EXP crossing the level boundary is counted correctly: `(required_prev − exp_prev) + exp_new`. |
-| **EXP loss** | An EXP drop without a level change, for example on death. It is subtracted from session EXP and logged. |
+| **Level-up** | Detected when the level digits increase by one, or when EXP drops and the implied required EXP grows (or the percent wraps from high to low). The EXP crossing the level boundary is counted correctly: `(required_prev − exp_prev) + exp_new`. |
+| **EXP loss** | An EXP drop that still agrees with the current level's required EXP, for example on death. It is subtracted from session EXP and logged. |
 | **Auto-pause** | If the HUD isn't visible for a few seconds (alt-tab, cash shop, loading screens), the session clock stops until it reappears. |
 
 ---
@@ -143,7 +143,7 @@ Development is incremental. Each stage ends with something you can check before 
 | **1. Skeleton** | Template-based project that builds and loads in OBS; locales; CI | OBS log shows `EXP Meter loaded` | ✅ Done |
 | **2. Offline HUD reading** | Locator + OCR + parser library with tests; `expmeter-cli image.png` | `ctest` passes; the CLI prints `exp=74660 pct=28.00 lv=39` for the reference image | ✅ Done |
 | **3. OBS filter** | Filter captures the HUD region and logs readings | Correct readings in the OBS log, from the reference image or the live game | ✅ Done |
-| **4. Stats engine** | Rates, ETA, level-up, loss, auto-pause, with tests | Simulated tests pass; live values look sane | ⚪ |
+| **4. Stats engine** | Rates, ETA, level-up, loss, auto-pause, with tests | Simulated tests pass; live values look sane | ✅ Done |
 | **5. Dock** | Source selector, status, stats, Start/Pause/Reset | Works without adding filters by hand | ⚪ |
 | **6. Overlay** | Local server, themes, *Add overlay to scene*, custom CSS | Overlay visible in the scene and restyled by CSS | ⚪ |
 | **7. Spot comparison** | Named measurements, history, comparison table, hotkey | Measure two maps and compare them in the dock | ⚪ |

@@ -40,7 +40,13 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE src/plugin-main.cpp src/exp-filter.
 add_library(expmeter-core STATIC)
 target_sources(
   expmeter-core
-  PRIVATE src/hud/glyph_ocr.cpp src/hud/hud_reader.cpp src/hud/locator.cpp src/hud/parser.cpp src/hud/render.cpp
+  PRIVATE
+    src/hud/glyph_ocr.cpp
+    src/hud/hud_reader.cpp
+    src/hud/locator.cpp
+    src/hud/parser.cpp
+    src/hud/render.cpp
+    src/stats/session.cpp
   PUBLIC
     src/hud/glyph_ocr.hpp
     src/hud/glyphs.hpp
@@ -49,6 +55,7 @@ target_sources(
     src/hud/locator.hpp
     src/hud/parser.hpp
     src/hud/render.hpp
+    src/stats/session.hpp
 )
 target_include_directories(expmeter-core PUBLIC src)
 target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE expmeter-core)
@@ -68,7 +75,13 @@ if(ENABLE_TESTS)
   add_executable(expmeter-cli tools/expmeter-cli.cpp)
   target_link_libraries(expmeter-cli PRIVATE expmeter-imagefile)
 
-  add_executable(expmeter-tests tests/test_main.cpp tests/test_parser.cpp tests/test_hud_reader.cpp)
+  add_executable(
+    expmeter-tests
+    tests/test_main.cpp
+    tests/test_parser.cpp
+    tests/test_hud_reader.cpp
+    tests/test_session.cpp
+  )
   target_include_directories(expmeter-tests PRIVATE third_party/doctest)
   target_link_libraries(expmeter-tests PRIVATE expmeter-imagefile)
   target_compile_definitions(
