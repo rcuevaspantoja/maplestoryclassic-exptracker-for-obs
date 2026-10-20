@@ -3,7 +3,8 @@ param(
     [ValidateSet('x64')]
     [string] $Target = 'x64',
     [ValidateSet('Debug', 'RelWithDebInfo', 'Release', 'MinSizeRel')]
-    [string] $Configuration = 'RelWithDebInfo'
+    [string] $Configuration = 'RelWithDebInfo',
+    [switch] $BuildInstaller
 )
 
 $ErrorActionPreference = 'Stop'
@@ -53,6 +54,7 @@ function Package {
         ErrorAction = 'SilentlyContinue'
         Path = @(
             "${ProjectRoot}/release/${ProductName}-*-windows-*.zip"
+            "${ProjectRoot}/release/${ProductName}-*-windows-*.exe"
         )
     }
 
@@ -67,6 +69,41 @@ function Package {
     }
     Compress-Archive -Force @CompressArgs
     Log-Group
+
+    if ( $BuildInstaller ) {
+        Log-Group "Building installer for ${ProductName}..."
+        function Find-Iscc {
+            $Found = (Get-Command -Name iscc -ErrorAction SilentlyContinue).Source
+            if ( $Found ) { return $Found }
+            $Candidates = @(
+                "${env:ProgramFiles(x86)}/Inno Setup */ISCC.exe"
+                "${env:ProgramFiles}/Inno Setup */ISCC.exe"
+                "${env:LOCALAPPDATA}/Programs/Inno Setup */ISCC.exe"
+            )
+            return (Get-Item -Path $Candidates -ErrorAction SilentlyContinue | Select-Object -Last 1).FullName
+        }
+
+        $Iscc = Find-Iscc
+        if ( ! $Iscc ) {
+            choco install innosetup --no-progress -y
+            $Iscc = Find-Iscc
+        }
+        if ( ! $Iscc ) {
+            throw 'Inno Setup (ISCC.exe) not found'
+        }
+
+        $IsccArgs = @(
+            "/DAppVersion=${ProductVersion}"
+            "/DStagingDir=${ProjectRoot}/release/${Configuration}"
+            "/DOutputDir=${ProjectRoot}/release"
+            "${ProjectRoot}/installer/${ProductName}.iss"
+        )
+        & $Iscc @IsccArgs
+        if ( $LASTEXITCODE -ne 0 ) {
+            throw "ISCC failed with exit code ${LASTEXITCODE}"
+        }
+        Log-Group
+    }
 }
 
 Package

@@ -5,9 +5,8 @@ An **OBS Studio** plugin built exclusively for **MapleStory Classic** streamers.
 - **EXP per minute** (and per hour)
 - **Session EXP**: how much EXP you have earned since you started measuring
 - **Time to level up**: an estimate based on your current pace
-- **Training-spot comparison**: measure a map, start a new measurement on another map, and see which one pays better
 
-> Status: **Stage 7 – Spot comparison (next).** Open **Docks → EXP Meter** in OBS, pick your game capture, and click **Add to scene** to show EXP/min, EXP/hour, session EXP and time to level on stream. See [Roadmap](#roadmap).
+> Status: **Stage 8 – Distribution (next).** Open **Docks → EXP Meter** in OBS, pick your game capture, and click **Add to scene** to show EXP/min, EXP/hour, session EXP and time to level on stream. See [Roadmap](#roadmap).
 
 ---
 
@@ -37,7 +36,7 @@ The plugin:
 3. Feeds those readings into a **stats engine** that calculates rates, totals and ETA.
 4. Publishes the results to:
    - an **overlay** (a Browser Source in your scene, which you can style with CSS),
-   - a **dock panel** inside OBS (controls and comparison table),
+   - a **dock panel** inside OBS (source, status and controls),
    - optionally, **text files** for other tools.
 
 ---
@@ -59,7 +58,6 @@ The plugin:
 - **Status**: a colored dot and a short message (`Reading the HUD`, `HUD not visible`, `Paused`, …). The numbers themselves are shown only in the overlay.
 - **Start / Pause** buttons.
 - **Reset** button (asks for confirmation).
-- **New measurement** button, with an optional name, for comparing spots (see below).
 - **Add to scene**, which creates the Browser Source in the current scene automatically.
 - **Overlay theme** and **overlay port** (default 48620). If the port is taken by another program, the dock says so in red; pick another one and the overlay follows it.
 
@@ -72,23 +70,6 @@ The plugin:
   - `?hide=exp-per-min-avg,eta` hides stats. The ids are `exp-per-min`, `exp-per-min-avg`, `exp-per-hour`, `session-exp`, `eta`.
 - Every element has a stable id/class (`#exp-meter`, `#stat-<id>`, `.stat-label`, `.stat-value`, `#status`). Colors, font and size are CSS variables (`--em-accent`, `--em-size`, …). Restyle it from the Browser Source's **Custom CSS** field; see [`data/overlay/custom-css-example.css`](data/overlay/custom-css-example.css).
 
-### Training-spot comparison
-A common streamer question is *"Which map is better for my level?"* EXP Meter answers it like this:
-
-1. Train at spot A for a few minutes.
-2. Press **New measurement** (in the dock, or with a configurable OBS **hotkey** so you don't have to leave the game) and optionally name it, e.g. `Ant Tunnel 2`.
-3. Move to spot B and train.
-4. The dock shows a **comparison table** of past measurements and highlights the best EXP/min.
-
-Each saved measurement stores:
-- its name,
-- duration,
-- total EXP,
-- average EXP/min,
-- and the level when it was taken.
-
-The history persists across OBS restarts. You can delete single entries or clear all of it.
-
 ---
 
 ## Metrics glossary
@@ -96,7 +77,7 @@ The history persists across OBS restarts. You can delete single entries or clear
 | Term | Definition |
 |---|---|
 | **Reading** | One accepted capture of `(time, exp, percent, level)` from the HUD. A reading is accepted only if:<br>• its confidence is above the threshold,<br>• the same value was read twice in a row,<br>• and its `exp ÷ percent` agrees with the required EXP implied by the previous readings (a misread digit breaks that agreement). A different value that keeps being read consistently (e.g. after switching characters) becomes the new baseline without counting as EXP. |
-| **Measurement** (session) | The time span between Start/Reset/New measurement and now. All "session" stats refer to the current measurement. |
+| **Measurement** (session) | The time span between Start/Reset and now. All "session" stats refer to the current measurement. |
 | **Session EXP** | Sum of the EXP gained during the measurement, **minus** any EXP lost (for example, on death). |
 | **EXP / min** | EXP gained in the averaging window ÷ active minutes in that window. The session average (session EXP ÷ session minutes) is also available. |
 | **Required EXP** | Total EXP needed for the current level, computed only from the HUD: every reading bounds it to `exp ÷ percent` (the percent has 2 decimals), and intersecting those bounds narrows it to within ~0.1%. No level table is needed; it restarts on every level-up. |
@@ -120,15 +101,15 @@ Game Capture ──("EXP Meter" filter)──► HUD reader ──► Stats engi
 
 | Component | Path | Responsibility |
 |---|---|---|
-| Plugin entry | `src/plugin-main.cpp` | Registers the filter, dock and hotkeys, and starts the server |
+| Plugin entry | `src/plugin-main.cpp` | Registers the filter and dock, and starts the server |
 | Frame capture | `src/exp-filter.cpp` | Video filter. It passes the image through untouched. About every 500 ms it renders only the HUD region and copies it to the CPU asynchronously (`gs_texrender` → `gs_stage_texture` → `gs_stagesurface_map`), then hands it to a worker thread |
 | HUD locator | `src/hud/locator.*` | Finds the `EXP.` label template in the bottom of the frame (native scale first, then the 1080p stretch, then all scales), refines the scale and sub-pixel position, and caches it |
 | HUD reader | `src/hud/hud_reader.*`, `src/hud/render.*` | Native HUDs are read directly. A stretched HUD is resampled back to native pixels, with the stretch calibrated once against the EXP text itself, and then read with the same exact decoder |
 | Glyph OCR | `src/hud/glyph_ocr.*`, `src/hud/glyphs.hpp` | Matches each character against the HUD pixel font, which is embedded in the code as bitmaps extracted from native captures. There is one set for the EXP text and one for the level digits in the orange boxes |
 | Parser | `src/hud/parser.*` | Turns `74.660 [28.00%]` into `exp = 74660, pct = 28.00`. A `.` or `,` before `[` is a thousands separator |
-| Stats engine | `src/stats/` | Pure C++ with no OBS dependency, so it is unit-testable. Handles rates, totals, ETA, level-ups, losses, auto-pause and measurement history |
+| Stats engine | `src/stats/` | Pure C++ with no OBS dependency, so it is unit-testable. Handles rates, totals, ETA, level-ups, losses, and auto-pause |
 | Local server | `src/server/` | cpp-httplib bound to `127.0.0.1:48620`. Serves `data/overlay/` and the live stats as JSON at `/api/state`; the overlay polls it every second |
-| Dock | `src/ui/exp-dock.*` | Qt6 panel: source selector, status, stats, controls, comparison table |
+| Dock | `src/ui/exp-dock.*` | Qt6 panel: source selector, status, controls, overlay settings |
 | Assets | `data/` | `overlay/` (HTML/CSS/JS), `locale/` (`en-US.ini`, `es-ES.ini`) |
 | Tests | `tests/` | doctest unit tests: OCR on reference images, the parser, and the stats engine with simulated sequences |
 
@@ -149,8 +130,7 @@ Development is incremental. Each stage ends with something you can check before 
 | **4. Stats engine** | Rates, ETA, level-up, loss, auto-pause, with tests | Simulated tests pass; live values look sane | ✅ Done |
 | **5. Dock** | Source selector, status, stats, Start/Pause/Reset | Works without adding filters by hand | ✅ Done |
 | **6. Overlay** | Local server, themes, *Add to scene*, custom CSS | Overlay visible in the scene and restyled by CSS | ✅ Done |
-| **7. Spot comparison** | Named measurements, history, comparison table, hotkey | Measure two maps and compare them in the dock | ⚪ |
-| **8. Distribution** | Windows installer, session persistence, optional `.txt` output, user guide | Clean install, then repeat the checks from stages 3–7 | ⚪ |
+| **8. Distribution** | Windows installer, session persistence, optional `.txt` output, user guide | Clean install, then repeat the checks from stages 3–6 | ⚪ |
 
 ---
 
@@ -163,6 +143,20 @@ Development is incremental. Each stage ends with something you can check before 
   - Visual Studio 2022 or 2026 (or Build Tools) with the "Desktop development with C++" workload
   - CMake 3.28 or newer
   - Git
+
+---
+
+## Installing
+
+1. Close OBS.
+2. Download `exp-meter-for-obs-<version>-windows-x64-installer.exe` from the [latest release](https://github.com/rcuevaspantoja/maplestoryclassic-exptracker-for-obs/releases/latest) and run it. It doesn't need admin rights.
+3. Open OBS, then **Docks → EXP Meter**, pick your game capture and click **Add to scene**.
+
+Windows may show *"Windows protected your PC"* because the installer isn't code-signed yet. Click **More info → Run anyway**.
+
+The installer puts the plugin in `C:\ProgramData\obs-studio\plugins\exp-meter-for-obs`. Uninstall it from **Settings → Apps**. Your settings are kept in OBS's own config folder.
+
+If you'd rather not use the installer, download the `.zip` instead and extract it into `C:\ProgramData\obs-studio\plugins`.
 
 ---
 
@@ -204,7 +198,19 @@ ctest --test-dir build_x64 -C RelWithDebInfo --output-on-failure
 
 The CLI accepts any PNG or BMP screenshot. It is the quickest way to check whether a capture can be read.
 
-CI (GitHub Actions) builds the Windows plugin on every push and uploads it as a build artifact.
+### Installer
+
+The installer is built with [Inno Setup](https://jrsoftware.org/isinfo.php) 6 or newer from [`installer/exp-meter-for-obs.iss`](installer/exp-meter-for-obs.iss):
+
+```powershell
+cmake --install build_x64 --config RelWithDebInfo --prefix release/RelWithDebInfo
+iscc /DAppVersion=0.1.0 /DStagingDir=$PWD\release\RelWithDebInfo /DOutputDir=$PWD\release installer\exp-meter-for-obs.iss
+#   release\exp-meter-for-obs-0.1.0-windows-x64-installer.exe
+```
+
+It finds OBS through the registry, warns when OBS is missing or older than 30, asks the user to close OBS while it runs, and offers to open OBS at the end.
+
+CI (GitHub Actions) builds the Windows plugin on every push and uploads it as a build artifact. On pushes to `master` and on version tags, it also builds the `.zip` and the installer. A version tag (`x.y.z`) creates a draft GitHub release with both files.
 
 ---
 
@@ -244,6 +250,7 @@ Take captures **at the game's native size**, for example with OBS's *Screenshot 
 │   ├── overlay/  locale/
 ├── tests/
 ├── tools/          (expmeter-cli, image loading)
+├── installer/      (Inno Setup script)
 ├── third_party/    (stb_image, doctest, cpp-httplib)
 └── references/     (game captures, samples, original spec)
 ```

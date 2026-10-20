@@ -108,6 +108,7 @@ runs:
         $PackageArgs = @{
           Target = '${{ inputs.target }}'
           Configuration = '${{ inputs.config }}'
+          BuildInstaller = ( '${{ inputs.package }}' -eq 'true' )
         }
 
         .github/scripts/Package-Windows.ps1 @PackageArgs
