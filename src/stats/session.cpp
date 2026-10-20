@@ -254,6 +254,7 @@ SessionStats Session::stats(int64_t now_ms) const
 		const int64_t base = window_start > 0 ? netAt(window_start) : 0;
 		s.exp_per_min = (s.session_exp - base) / window_min;
 		s.session_exp_per_min = s.session_exp / (s.active_ms / 60000.0);
+		s.exp_per_hour = s.session_exp_per_min * 60.0;
 	}
 	s.rate_ready = s.active_ms >= config_.warmup_ms;
 

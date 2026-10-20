@@ -102,12 +102,13 @@ void Meter::logSummary(const SessionStats &s, const std::string &source_name)
 	const std::string required = s.required_exp ? formatNumber(static_cast<int64_t>(*s.required_exp))
 						    : std::string("?");
 	obs_log(LOG_INFO,
-		"[%s] session %s%s%s | %s EXP | %s EXP/min (last 5 min) | %s EXP/min avg | lv %d %.2f%% of %s | "
+		"[%s] session %s%s%s | %s EXP | %s EXP/min (last 5 min) | %s EXP/min avg | %s EXP/h | lv %d %.2f%% of %s | "
 		"next level in %s",
 		source_name.c_str(), formatDuration(s.active_ms / 1000.0).c_str(), s.running ? "" : " (paused)",
 		s.hud_visible ? "" : " (HUD not visible)", formatNumber(s.session_exp).c_str(),
 		s.rate_ready ? formatNumber(std::llround(s.exp_per_min)).c_str() : "-",
-		s.rate_ready ? formatNumber(std::llround(s.session_exp_per_min)).c_str() : "-", s.level,
+		s.rate_ready ? formatNumber(std::llround(s.session_exp_per_min)).c_str() : "-",
+		s.rate_ready ? formatNumber(std::llround(s.exp_per_hour)).c_str() : "-", s.level,
 		s.percent_x100 / 100.0, required.c_str(), eta.c_str());
 }
 

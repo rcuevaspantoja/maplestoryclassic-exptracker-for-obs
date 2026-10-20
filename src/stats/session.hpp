@@ -39,8 +39,9 @@ struct SessionStats {
 	int losses = 0; // EXP drops without a level change (deaths)
 
 	bool rate_ready = false;            // enough measured time for stable rates
-	double exp_per_min = 0.0;           // over the sliding window
+	double exp_per_min = 0.0;           // over the sliding window (last 5 minutes)
 	double session_exp_per_min = 0.0;   // over the whole measurement
+	double exp_per_hour = 0.0;          // session average, per hour
 	std::optional<double> required_exp; // total EXP of the current level (estimated)
 	std::optional<double> eta_seconds;  // time to the next level at exp_per_min
 };

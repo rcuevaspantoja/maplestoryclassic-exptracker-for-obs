@@ -7,14 +7,14 @@ An **OBS Studio** plugin built exclusively for **MapleStory Classic** streamers.
 - **Time to level up**: an estimate based on your current pace
 - **Training-spot comparison**: measure a map, start a new measurement on another map, and see which one pays better
 
-> Status: **Stage 6 – Overlay (next).** Open **Docks → EXP Meter** in OBS, pick your game capture, and the live stats appear there (EXP/min, session EXP, time to level), with Pause and Reset. See [Roadmap](#roadmap).
+> Status: **Stage 7 – Spot comparison (next).** Open **Docks → EXP Meter** in OBS, pick your game capture, and click **Add to scene** to show EXP/min, EXP/hour, session EXP and time to level on stream. See [Roadmap](#roadmap).
 
 ---
 
 ## Principles
 
 1. **It never touches the game.** The plugin doesn't read the game's memory, inject into its process, or send input to its window. It only looks at the image OBS is already capturing for the stream, which is the same thing your viewers see.
-2. **It's simple for anyone.** You shouldn't need to know OBS filters or the game's internals. Pick your game source, click *Add overlay to scene*, and you're done.
+2. **It's simple for anyone.** You shouldn't need to know OBS filters or the game's internals. Pick your game source, click *Add to scene*, and you're done.
 3. **It's light.** Reading the HUD only processes a small strip of the frame a couple of times per second, never every frame, and never on OBS's graphics thread.
 4. **It stays local.** Everything runs on your machine. The overlay is served only on `127.0.0.1`, and no data leaves your PC.
 
@@ -44,11 +44,11 @@ The plugin:
 
 ## Features
 
-### Live stats (overlay + dock)
+### Live stats (overlay)
 | Stat | Description |
 |---|---|
 | EXP / min | Gain rate over a sliding window (default: last 5 minutes) |
-| EXP / hour | The same rate, scaled to one hour |
+| EXP / hour | Session average, scaled to one hour |
 | Session EXP | Net EXP earned during the current measurement |
 | Session time | Active time of the current measurement (pauses automatically) |
 | Level / % | Current level and progress, as shown in the HUD |
@@ -56,18 +56,21 @@ The plugin:
 
 ### Dock panel (inside OBS)
 - **Game source** selector. It attaches the filter for you, so you never edit filters by hand.
-- **Detection status**: `HUD detected ✓`, the last reading, and a confidence score, so you can see whether reading is working.
+- **Status**: a colored dot and a short message (`Reading the HUD`, `HUD not visible`, `Paused`, …). The numbers themselves are shown only in the overlay.
 - **Start / Pause** buttons.
 - **Reset** button (asks for confirmation).
 - **New measurement** button, with an optional name, for comparing spots (see below).
-- **Add overlay to scene**, which creates the Browser Source in the current scene automatically.
-- **Settings**: averaging window, read interval, server port, text-file output.
+- **Add to scene**, which creates the Browser Source in the current scene automatically.
+- **Overlay theme** and **overlay port** (default 48620). If the port is taken by another program, the dock says so in red; pick another one and the overlay follows it.
 
 ### Overlay (Browser Source + CSS)
-- Served by the plugin at `http://127.0.0.1:48620/`. The port is configurable.
-- Built-in themes are chosen with a query parameter: `?theme=minimal`, `?theme=maple`, `?theme=compact`.
-- All elements have stable IDs and classes (`#exp-per-min`, `#session-exp`, `#eta`, `.stat`, `.stat-label`, `.stat-value`, …). You can restyle everything from the Browser Source's **Custom CSS** field in OBS. A commented example stylesheet will be included.
-- Optional comparison view: `?show=compare`.
+- Click **Add to scene** in the dock, or add a Browser Source with the URL `http://127.0.0.1:48620/` by hand. The overlay is served only to your own PC and makes no internet requests.
+- It shows **EXP/min (last 5 min)**, **EXP/min (average)**, **EXP/hour**, **Session EXP** and **Next level in**, and dims itself with a short message while paused or while the HUD is not visible.
+- URL options, which can be combined with `&`:
+  - `?theme=default` | `maple` | `solid` | `light` | `ocean`. Themes only change colors; size and shape stay the same. `solid` has a fully opaque background. The dock's **Theme** selector sets this for you.
+  - `?lang=en` | `es`. The default is the OBS language.
+  - `?hide=exp-per-min-avg,eta` hides stats. The ids are `exp-per-min`, `exp-per-min-avg`, `exp-per-hour`, `session-exp`, `eta`.
+- Every element has a stable id/class (`#exp-meter`, `#stat-<id>`, `.stat-label`, `.stat-value`, `#status`). Colors, font and size are CSS variables (`--em-accent`, `--em-size`, …). Restyle it from the Browser Source's **Custom CSS** field; see [`data/overlay/custom-css-example.css`](data/overlay/custom-css-example.css).
 
 ### Training-spot comparison
 A common streamer question is *"Which map is better for my level?"* EXP Meter answers it like this:
@@ -112,7 +115,7 @@ Game Capture ──("EXP Meter" filter)──► HUD reader ──► Stats engi
                                                         session, history)  │
                                                    ┌───────────────────────┼──────────────┐
                                              Local HTTP server         Qt dock      (opt.) .txt
-                                            (overlay + JSON/SSE)
+                                            (overlay + JSON)
 ```
 
 | Component | Path | Responsibility |
@@ -124,9 +127,9 @@ Game Capture ──("EXP Meter" filter)──► HUD reader ──► Stats engi
 | Glyph OCR | `src/hud/glyph_ocr.*`, `src/hud/glyphs.hpp` | Matches each character against the HUD pixel font, which is embedded in the code as bitmaps extracted from native captures. There is one set for the EXP text and one for the level digits in the orange boxes |
 | Parser | `src/hud/parser.*` | Turns `74.660 [28.00%]` into `exp = 74660, pct = 28.00`. A `.` or `,` before `[` is a thousands separator |
 | Stats engine | `src/stats/` | Pure C++ with no OBS dependency, so it is unit-testable. Handles rates, totals, ETA, level-ups, losses, auto-pause and measurement history |
-| Local server | `src/server/` | cpp-httplib bound to `127.0.0.1`. Routes: `/` (overlay), `/api/state` (JSON), `/events` (SSE), `POST /api/reset` |
+| Local server | `src/server/` | cpp-httplib bound to `127.0.0.1:48620`. Serves `data/overlay/` and the live stats as JSON at `/api/state`; the overlay polls it every second |
 | Dock | `src/ui/exp-dock.*` | Qt6 panel: source selector, status, stats, controls, comparison table |
-| Assets | `data/` | `exp_table.json`, `overlay/` (HTML/CSS/JS), `locale/` (`en-US.ini`, `es-ES.ini`) |
+| Assets | `data/` | `overlay/` (HTML/CSS/JS), `locale/` (`en-US.ini`, `es-ES.ini`) |
 | Tests | `tests/` | doctest unit tests: OCR on reference images, the parser, and the stats engine with simulated sequences |
 
 **Tech stack:** C++17, CMake, [obs-plugintemplate](https://github.com/obsproject/obs-plugintemplate), Qt6 (comes with OBS), cpp-httplib, stb_image, doctest. Windows x64 comes first.
@@ -145,7 +148,7 @@ Development is incremental. Each stage ends with something you can check before 
 | **3. OBS filter** | Filter captures the HUD region and logs readings | Correct readings in the OBS log, from the reference image or the live game | ✅ Done |
 | **4. Stats engine** | Rates, ETA, level-up, loss, auto-pause, with tests | Simulated tests pass; live values look sane | ✅ Done |
 | **5. Dock** | Source selector, status, stats, Start/Pause/Reset | Works without adding filters by hand | ✅ Done |
-| **6. Overlay** | Local server, themes, *Add overlay to scene*, custom CSS | Overlay visible in the scene and restyled by CSS | ⚪ |
+| **6. Overlay** | Local server, themes, *Add to scene*, custom CSS | Overlay visible in the scene and restyled by CSS | ✅ Done |
 | **7. Spot comparison** | Named measurements, history, comparison table, hotkey | Measure two maps and compare them in the dock | ⚪ |
 | **8. Distribution** | Windows installer, session persistence, optional `.txt` output, user guide | Clean install, then repeat the checks from stages 3–7 | ⚪ |
 
@@ -238,10 +241,10 @@ Take captures **at the game's native size**, for example with OBS's *Screenshot 
 │   ├── server/     (http server)
 │   └── ui/         (exp-dock)
 ├── data/
-│   ├── exp_table.json  overlay/  locale/
+│   ├── overlay/  locale/
 ├── tests/
 ├── tools/          (expmeter-cli, image loading)
-├── third_party/    (stb_image, doctest)
+├── third_party/    (stb_image, doctest, cpp-httplib)
 └── references/     (game captures, samples, original spec)
 ```
 

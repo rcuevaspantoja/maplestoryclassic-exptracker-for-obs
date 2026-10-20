@@ -20,6 +20,8 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <plugin-support.h>
 
 #include "exp-filter.hpp"
+#include "server/http-server.hpp"
+#include "settings.hpp"
 #include "ui/exp-dock.hpp"
 
 OBS_DECLARE_MODULE()
@@ -45,11 +47,14 @@ bool obs_module_load(void)
 // Docks need the OBS main window, which is ready once all modules are loaded.
 void obs_module_post_load(void)
 {
+	// Start the server first, so the dock shows its real state from the start.
+	startOverlayServer(expmeter::loadSettings().overlay_port);
 	registerExpDock();
 }
 
 void obs_module_unload(void)
 {
+	stopOverlayServer();
 	unregisterExpDock();
 	obs_log(LOG_INFO, "EXP Meter unloaded");
 }

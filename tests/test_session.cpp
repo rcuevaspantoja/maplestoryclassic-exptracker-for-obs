@@ -167,6 +167,7 @@ TEST_CASE("rates, required EXP and time to level")
 	CHECK(s.rate_ready);
 	CHECK(s.exp_per_min == doctest::Approx(3000).epsilon(0.02));
 	CHECK(s.session_exp_per_min == doctest::Approx(3000).epsilon(0.02));
+	CHECK(s.exp_per_hour == doctest::Approx(180000).epsilon(0.02));
 	REQUIRE(s.required_exp);
 	CHECK(*s.required_exp == doctest::Approx(kRequired39).epsilon(0.001));
 	REQUIRE(s.eta_seconds);

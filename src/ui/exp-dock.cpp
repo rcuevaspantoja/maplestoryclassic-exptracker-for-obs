@@ -1,25 +1,24 @@
 #include "exp-dock.hpp"
 
 #include "exp-filter.hpp"
-#include "format.hpp"
 #include "meter.hpp"
+#include "server/http-server.hpp"
+#include "settings.hpp"
 
 #include <obs-frontend-api.h>
 #include <obs-module.h>
 
 #include <QAbstractItemView>
 #include <QComboBox>
-#include <QFont>
-#include <QGridLayout>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QMessageBox>
 #include <QPushButton>
+#include <QSpinBox>
 #include <QTimer>
 #include <QVBoxLayout>
 #include <QWidget>
 
-#include <cmath>
 #include <string>
 #include <vector>
 
@@ -121,6 +120,57 @@ void attachExpFilter(const std::string &name)
 	obs_source_release(source);
 }
 
+// Overlay color themes, in the order shown in the dock: theme id and label key.
+constexpr const char *kThemes[][2] = {
+	{"default", "EXPMeter.Theme.Default"}, {"maple", "EXPMeter.Theme.Maple"}, {"solid", "EXPMeter.Theme.Solid"},
+	{"light", "EXPMeter.Theme.Light"},     {"ocean", "EXPMeter.Theme.Ocean"},
+};
+
+std::string overlayUrlFor(const std::string &theme)
+{
+	return theme == "default" ? overlayUrl() : overlayUrl() + "?theme=" + theme;
+}
+
+// Points an existing overlay Browser Source at the chosen design.
+void applyThemeToOverlay(const std::string &theme)
+{
+	obs_source_t *overlay = obs_get_source_by_name(obs_module_text("EXPMeter.Overlay.SourceName"));
+	if (!overlay)
+		return;
+	obs_data_t *settings = obs_data_create();
+	obs_data_set_string(settings, "url", overlayUrlFor(theme).c_str());
+	obs_source_update(overlay, settings);
+	obs_data_release(settings);
+	obs_source_release(overlay);
+}
+
+// Adds the overlay Browser Source to the current scene (creating it the first time).
+bool addOverlayToScene(const std::string &theme)
+{
+	const char *name = obs_module_text("EXPMeter.Overlay.SourceName");
+	obs_source_t *scene_source = obs_frontend_get_current_scene();
+	if (!scene_source)
+		return false;
+	obs_scene_t *scene = obs_scene_from_source(scene_source);
+
+	obs_source_t *overlay = obs_get_source_by_name(name);
+	if (!overlay) {
+		obs_data_t *settings = obs_data_create();
+		obs_data_set_string(settings, "url", overlayUrlFor(theme).c_str());
+		// The panel fills the whole source; 380x150 fits its five rows.
+		obs_data_set_int(settings, "width", 380);
+		obs_data_set_int(settings, "height", 150);
+		overlay = obs_source_create("browser_source", name, settings, nullptr);
+		obs_data_release(settings);
+	}
+	bool ok = overlay != nullptr;
+	if (overlay && scene && !obs_scene_find_source(scene, name))
+		ok = obs_scene_add(scene, overlay) != nullptr;
+	obs_source_release(overlay);
+	obs_source_release(scene_source);
+	return ok;
+}
+
 // Re-lists the sources every time it opens, so new ones show up.
 class SourceComboBox : public QComboBox {
 public:
@@ -162,23 +212,41 @@ public:
 		status_->setWordWrap(true);
 		layout->addWidget(status_);
 
-		auto *grid = new QGridLayout();
-		int row = 0;
-		exp_per_min_ = addStat(grid, row++, "EXPMeter.Dock.ExpPerMin", true);
-		exp_per_min_avg_ = addStat(grid, row++, "EXPMeter.Dock.ExpPerMinAvg");
-		session_exp_ = addStat(grid, row++, "EXPMeter.Dock.SessionExp", true);
-		session_time_ = addStat(grid, row++, "EXPMeter.Dock.SessionTime");
-		level_ = addStat(grid, row++, "EXPMeter.Dock.Level");
-		next_level_ = addStat(grid, row++, "EXPMeter.Dock.NextLevel", true);
-		grid->setColumnStretch(1, 1);
-		layout->addLayout(grid);
-
 		auto *buttons = new QHBoxLayout();
 		pause_ = new QPushButton(text("EXPMeter.Dock.Pause"), this);
 		reset_ = new QPushButton(text("EXPMeter.Dock.Reset"), this);
 		buttons->addWidget(pause_);
 		buttons->addWidget(reset_);
 		layout->addLayout(buttons);
+
+		auto *theme_row = new QHBoxLayout();
+		theme_row->addWidget(new QLabel(text("EXPMeter.Dock.OverlayTheme"), this));
+		themes_ = new QComboBox(this);
+		for (const auto &theme : kThemes)
+			themes_->addItem(text(theme[1]), QString::fromUtf8(theme[0]));
+		const expmeter::Settings settings = expmeter::loadSettings();
+		const int saved = themes_->findData(qstr(settings.overlay_theme));
+		themes_->setCurrentIndex(saved >= 0 ? saved : 0);
+		theme_row->addWidget(themes_, 1);
+		add_overlay_ = new QPushButton(text("EXPMeter.Dock.AddOverlay"), this);
+		theme_row->addWidget(add_overlay_);
+		layout->addLayout(theme_row);
+
+		auto *port_row = new QHBoxLayout();
+		port_row->addWidget(new QLabel(text("EXPMeter.Dock.OverlayPort"), this));
+		port_ = new QSpinBox(this);
+		port_->setRange(1024, 65535);
+		port_->setValue(settings.overlay_port);
+		port_->setKeyboardTracking(false); // apply when editing finishes, not on every digit
+		port_row->addWidget(port_, 1);
+		layout->addLayout(port_row);
+
+		url_ = new QLabel(this);
+		url_->setWordWrap(true);
+		url_->setTextInteractionFlags(Qt::TextBrowserInteraction);
+		url_->setOpenExternalLinks(true);
+		layout->addWidget(url_);
+		updateUrl();
 		layout->addStretch(1);
 
 		connect(sources_, &QComboBox::activated, this, [this](int index) {
@@ -201,6 +269,28 @@ public:
 			}
 		});
 
+		connect(themes_, &QComboBox::activated, this, [this](int index) {
+			expmeter::Settings settings = expmeter::loadSettings();
+			settings.overlay_theme = themes_->itemData(index).toString().toStdString();
+			expmeter::saveSettings(settings);
+			applyThemeToOverlay(settings.overlay_theme);
+		});
+		connect(port_, &QSpinBox::valueChanged, this, [this](int port) {
+			expmeter::Settings settings = expmeter::loadSettings();
+			if (port == settings.overlay_port && overlayServerRunning())
+				return;
+			settings.overlay_port = port;
+			expmeter::saveSettings(settings);
+			if (startOverlayServer(port))
+				applyThemeToOverlay(settings.overlay_theme); // point the overlay at the new port
+			updateUrl();
+		});
+		connect(add_overlay_, &QPushButton::clicked, this, [this] {
+			if (!addOverlayToScene(themes_->currentData().toString().toStdString()))
+				QMessageBox::warning(this, text("EXPMeter.Dock.Title"),
+						     text("EXPMeter.Dock.AddOverlayFailed"));
+		});
+
 		auto *timer = new QTimer(this);
 		connect(timer, &QTimer::timeout, this, [this] { refresh(); });
 		timer->start(kRefreshMs);
@@ -210,18 +300,19 @@ public:
 	}
 
 private:
-	QLabel *addStat(QGridLayout *grid, int row, const char *key, bool emphasize = false)
+	// Called on every refresh, so the message always matches the server's real state.
+	void updateUrl()
 	{
-		grid->addWidget(new QLabel(text(key), this), row, 0);
-		auto *value = new QLabel(QStringLiteral("-"), this);
-		value->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
-		if (emphasize) {
-			QFont font = value->font();
-			font.setBold(true);
-			value->setFont(font);
+		QString message;
+		if (overlayServerRunning()) {
+			message = QStringLiteral("%1 <a href=\"%2\">%2</a>")
+					  .arg(text("EXPMeter.Dock.OverlayUrl"), qstr(overlayUrl()));
+		} else {
+			message = QStringLiteral("<span style=\"color:#d03030\">%1</span>")
+					  .arg(text("EXPMeter.Dock.PortInUse").arg(port_->value()));
 		}
-		grid->addWidget(value, row, 1);
-		return value;
+		if (url_->text() != message) // avoid resetting a link the user is hovering
+			url_->setText(message);
 	}
 
 	void setStatus(const QString &message, const char *color)
@@ -236,27 +327,10 @@ private:
 			sources_->reload(attached);
 
 		const expmeter::MeterSnapshot snap = expmeter::Meter::instance().snapshot();
-		const expmeter::SessionStats &s = snap.stats;
 		updateStatus(snap, attached);
+		updateUrl();
 
-		const QString measuring = text("EXPMeter.Dock.Measuring");
-		exp_per_min_->setText(s.rate_ready ? qstr(expmeter::formatNumber(std::llround(s.exp_per_min)))
-						   : measuring);
-		exp_per_min_avg_->setText(
-			s.rate_ready ? qstr(expmeter::formatNumber(std::llround(s.session_exp_per_min))) : measuring);
-		session_exp_->setText(s.has_reading ? qstr(expmeter::formatNumber(s.session_exp))
-						    : QStringLiteral("-"));
-		session_time_->setText(qstr(expmeter::formatDuration(s.active_ms / 1000.0)));
-		if (s.has_reading) {
-			const QString level = s.level > 0 ? QString::number(s.level) : QStringLiteral("?");
-			level_->setText(QStringLiteral("%1 · %2%").arg(level).arg(s.percent_x100 / 100.0, 0, 'f', 2));
-		} else {
-			level_->setText(QStringLiteral("-"));
-		}
-		next_level_->setText(s.eta_seconds ? qstr(expmeter::formatDuration(*s.eta_seconds))
-						   : (s.has_reading ? measuring : QStringLiteral("-")));
-
-		pause_->setText(text(s.running ? "EXPMeter.Dock.Pause" : "EXPMeter.Dock.Resume"));
+		pause_->setText(text(snap.stats.running ? "EXPMeter.Dock.Pause" : "EXPMeter.Dock.Resume"));
 	}
 
 	void updateStatus(const expmeter::MeterSnapshot &snap, const std::string &attached)
@@ -291,14 +365,12 @@ private:
 
 	SourceComboBox *sources_;
 	QLabel *status_;
-	QLabel *exp_per_min_;
-	QLabel *exp_per_min_avg_;
-	QLabel *session_exp_;
-	QLabel *session_time_;
-	QLabel *level_;
-	QLabel *next_level_;
 	QPushButton *pause_;
 	QPushButton *reset_;
+	QComboBox *themes_;
+	QSpinBox *port_;
+	QLabel *url_;
+	QPushButton *add_overlay_;
 };
 
 } // namespace

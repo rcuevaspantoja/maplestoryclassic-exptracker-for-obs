@@ -43,9 +43,14 @@ target_sources(
     src/format.hpp
     src/meter.cpp
     src/meter.hpp
+    src/server/http-server.cpp
+    src/server/http-server.hpp
+    src/settings.cpp
+    src/settings.hpp
     src/ui/exp-dock.cpp
     src/ui/exp-dock.hpp
 )
+target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE src third_party/httplib)
 
 # HUD reading core: plain C++, no OBS dependency, so the CLI and tests can use it too.
 add_library(expmeter-core STATIC)

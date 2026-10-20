@@ -1,0 +1,36 @@
+/*
+ * Example for the Browser Source "Custom CSS" field in OBS.
+ * Copy the parts you want; everything here is optional.
+ */
+
+/* Colors, font and size of the whole overlay. */
+#exp-meter {
+	--em-text: #ffffff;
+	--em-label: #b8c4ff;
+	--em-accent: #7cf29a; /* highlighted values: EXP/min and next level */
+	--em-panel: rgba(10, 12, 40, 0.85);
+	--em-radius: 6px;
+	--em-size: 24px;
+	--em-font: 'Segoe UI', sans-serif;
+}
+
+/* Hide a stat (or use ?hide=exp-per-min-avg in the URL). */
+#stat-exp-per-min-avg {
+	display: none !important;
+}
+
+/* Bigger EXP/hour. */
+#exp-per-hour {
+	font-size: 1.3em;
+}
+
+/* Hide the "Paused" / "HUD not visible" message. */
+#status {
+	display: none;
+}
+
+/* Hide the whole overlay while not measuring. */
+#exp-meter.state-paused,
+#exp-meter.state-no-video {
+	opacity: 0;
+}

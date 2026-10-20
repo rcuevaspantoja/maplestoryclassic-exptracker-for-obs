@@ -1,0 +1,153 @@
+/*
+ * EXP Meter overlay styles.
+ *
+ * Structure:
+ *   #exp-meter               root; class state-ok | state-paused | state-hidden | state-no-video | state-offline
+ *     .stat#stat-<id>        one row: exp-per-min, exp-per-min-avg, exp-per-hour, session-exp, eta
+ *       .stat-label
+ *       .stat-value#<id>
+ *     .status#status         message shown when not reading (paused, HUD not visible, ...)
+ *
+ * The body has a theme class: theme-default | theme-maple | theme-solid | theme-light | theme-ocean.
+ */
+
+:root {
+	--em-font: 'Segoe UI', 'Nunito', sans-serif; /* local fonts only: the overlay makes no internet requests */
+	--em-text: #ffffff;
+	--em-label: rgba(255, 255, 255, 0.72);
+	--em-accent: #ffd34e;
+	--em-panel: rgba(16, 18, 26, 0.78);
+	--em-border: rgba(255, 255, 255, 0.12);
+	--em-radius: 12px;
+	--em-size: 20px;
+}
+
+html,
+body {
+	width: 100%;
+	height: 100%;
+	margin: 0;
+	background: transparent;
+	overflow: hidden;
+}
+
+/* The panel always fills the whole Browser Source, so the box OBS shows around the source
+   is exactly the visible panel. Rows are spread evenly over the height. */
+#exp-meter {
+	box-sizing: border-box;
+	display: flex;
+	flex-direction: column;
+	justify-content: space-evenly;
+	width: 100vw;
+	height: 100vh;
+	padding: 8px 18px;
+	line-height: 1.2;
+	font-family: var(--em-font);
+	font-size: var(--em-size);
+	color: var(--em-text);
+	background: var(--em-panel);
+	border: 1px solid var(--em-border);
+	border-radius: var(--em-radius);
+	transition: opacity 0.4s ease;
+}
+
+.stat {
+	display: flex;
+	justify-content: space-between;
+	align-items: baseline;
+	gap: 24px;
+}
+
+.stat[hidden] {
+	display: none;
+}
+
+.stat-label,
+.stat-value {
+	white-space: nowrap;
+}
+
+.stat-label {
+	font-size: 0.7em;
+	font-weight: 600;
+	color: var(--em-label);
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+}
+
+.stat-value {
+	font-weight: 800;
+	font-variant-numeric: tabular-nums;
+}
+
+#stat-exp-per-min .stat-value,
+#stat-eta .stat-value {
+	color: var(--em-accent);
+}
+
+.status {
+	font-size: 0.65em;
+	color: var(--em-label);
+}
+
+.status:empty {
+	display: none;
+}
+
+/* Fade the numbers while they are not being updated. */
+.state-paused .stat,
+.state-hidden .stat,
+.state-no-video .stat,
+.state-offline .stat {
+	opacity: 0.55;
+}
+
+/*
+ * Themes only change colors. Size, layout, borders and rounded corners always come from the
+ * default style above, so switching themes never moves or resizes the overlay.
+ */
+
+/* --- maple: warm orange, inspired by the game's UI --- */
+.theme-maple #exp-meter {
+	--em-text: #fff8ec;
+	--em-label: #ffe2b8;
+	--em-accent: #ffe45c;
+	--em-panel: rgba(214, 102, 14, 0.9);
+	--em-border: #ffc56b;
+}
+
+/* --- solid: fully opaque, no transparency anywhere --- */
+.theme-solid #exp-meter {
+	--em-text: #ffffff;
+	--em-label: #a7adbf;
+	--em-accent: #ffc83d;
+	--em-panel: #161922;
+	--em-border: #2e3445;
+}
+
+/* Inactive values turn gray instead of fading, so nothing becomes see-through. */
+.theme-solid #exp-meter .stat {
+	opacity: 1;
+}
+
+.theme-solid #exp-meter:not(.state-ok) .stat-value {
+	color: #6f7587;
+}
+
+/* --- light: white panel, dark text --- */
+.theme-light #exp-meter {
+	--em-text: #1d2433;
+	--em-label: #5d667a;
+	--em-accent: #1f6fe5;
+	--em-panel: rgba(255, 255, 255, 0.92);
+	--em-border: #d5dae4;
+}
+
+/* --- ocean: deep blue --- */
+.theme-ocean #exp-meter {
+	--em-text: #eaf6ff;
+	--em-label: #9fc9ea;
+	--em-accent: #5fe3ff;
+	--em-panel: rgba(10, 42, 84, 0.85);
+	--em-border: #2f6aa8;
+}

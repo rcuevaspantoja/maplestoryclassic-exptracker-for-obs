@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<title>EXP Meter</title>
+	<link rel="stylesheet" href="overlay.css">
+</head>
+<!--
+	EXP Meter overlay for an OBS Browser Source.
+
+	URL options (combine with &):
+	  ?theme=default | maple | solid | light | ocean   (colors only)
+	  ?lang=en | es              (default: the OBS language)
+	  ?hide=exp-per-min-avg,eta  (comma-separated stat ids to hide)
+
+	Every element has a stable id/class, so it can be restyled from the Browser Source's
+	"Custom CSS" field. See custom-css-example.css.
+-->
+<body>
+	<div id="exp-meter" class="state-no-video">
+		<div class="stat" id="stat-exp-per-min">
+			<span class="stat-label" data-label="expPerMin"></span>
+			<span class="stat-value" id="exp-per-min">-</span>
+		</div>
+		<div class="stat" id="stat-exp-per-min-avg">
+			<span class="stat-label" data-label="expPerMinAvg"></span>
+			<span class="stat-value" id="exp-per-min-avg">-</span>
+		</div>
+		<div class="stat" id="stat-exp-per-hour">
+			<span class="stat-label" data-label="expPerHour"></span>
+			<span class="stat-value" id="exp-per-hour">-</span>
+		</div>
+		<div class="stat" id="stat-session-exp">
+			<span class="stat-label" data-label="sessionExp"></span>
+			<span class="stat-value" id="session-exp">-</span>
+		</div>
+		<div class="stat" id="stat-eta">
+			<span class="stat-label" data-label="eta"></span>
+			<span class="stat-value" id="eta">-</span>
+		</div>
+		<div class="status" id="status"></div>
+	</div>
+	<script src="overlay.js"></script>
+</body>
+</html>
