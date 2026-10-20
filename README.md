@@ -6,8 +6,6 @@ An **OBS Studio** plugin built exclusively for **MapleStory Classic** streamers.
 - **Session EXP**: how much EXP you have earned since you started measuring
 - **Time to level up**: an estimate based on your current pace
 
-> Status: **Stage 7 – Distribution (next).** Open **Docks → EXP Meter** in OBS, pick your game capture, and click **Add to scene** to show EXP/min, EXP/hour, session EXP and time to level on stream. See [Roadmap](#roadmap).
-
 ---
 
 ## Principles
@@ -16,6 +14,18 @@ An **OBS Studio** plugin built exclusively for **MapleStory Classic** streamers.
 2. **It's simple for anyone.** You shouldn't need to know OBS filters or the game's internals. Pick your game source, click *Add to scene*, and you're done.
 3. **It's light.** Reading the HUD only processes a small strip of the frame a couple of times per second, never every frame, and never on OBS's graphics thread.
 4. **It stays local.** Everything runs on your machine. The overlay is served only on `127.0.0.1`, and no data leaves your PC.
+
+---
+
+## Screenshots
+
+The overlay on stream (*Solid* theme):
+
+![Overlay showing EXP/min, EXP/hour, session EXP and time to next level](references/images/Screenshot_20.png)
+
+The dock inside OBS:
+
+![EXP Meter dock with game source, status, Pause/Reset, theme, Add to scene and overlay port](references/images/Screenshot_21.png)
 
 ---
 

@@ -94,6 +94,7 @@ function Package {
 
         $IsccArgs = @(
             "/DAppVersion=${ProductVersion}"
+            "/DPublisher=$($BuildSpec.author)"
             "/DStagingDir=${ProjectRoot}/release/${Configuration}"
             "/DOutputDir=${ProjectRoot}/release"
             "${ProjectRoot}/installer/${ProductName}.iss"

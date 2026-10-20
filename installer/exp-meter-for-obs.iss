@@ -8,7 +8,6 @@
 
 #define PluginName "exp-meter-for-obs"
 #define DisplayName "EXP Meter for MapleStory Classic"
-#define Publisher "Rodolfo"
 #define Website "https://github.com/rcuevaspantoja/maplestoryclassic-exptracker-for-obs"
 #define MinObsMajor 30
 
@@ -17,6 +16,9 @@
 #endif
 #ifndef StagingDir
   #error Pass the cmake --install prefix with /DStagingDir=<path>
+#endif
+#ifndef Publisher
+  #define Publisher "@rcuevaspantoja"
 #endif
 #ifndef OutputDir
   #define OutputDir "."
