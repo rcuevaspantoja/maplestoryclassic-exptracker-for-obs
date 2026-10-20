@@ -14,8 +14,8 @@
 	--em-font: 'Segoe UI', sans-serif;
 }
 
-/* Hide a stat (or use ?hide=exp-per-min-avg in the URL). */
-#stat-exp-per-min-avg {
+/* Hide a stat (or use ?hide=eta in the URL). */
+#stat-eta {
 	display: none !important;
 }
 

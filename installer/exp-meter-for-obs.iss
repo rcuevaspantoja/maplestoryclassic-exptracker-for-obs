@@ -2,7 +2,7 @@
 ;
 ; Build it after installing the plugin into a staging folder:
 ;   cmake --install build_x64 --config RelWithDebInfo --prefix release/RelWithDebInfo
-;   iscc /DAppVersion=0.1.0 /DStagingDir=<repo>\release\RelWithDebInfo /DOutputDir=<repo>\release installer\exp-meter-for-obs.iss
+;   iscc /DAppVersion=0.1.1 /DStagingDir=<repo>\release\RelWithDebInfo /DOutputDir=<repo>\release installer\exp-meter-for-obs.iss
 ;
 ; The CI does this from .github/scripts/Package-Windows.ps1.
 

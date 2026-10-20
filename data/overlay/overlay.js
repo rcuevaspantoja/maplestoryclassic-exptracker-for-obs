@@ -7,7 +7,6 @@
 	const LABELS = {
 		en: {
 			expPerMin: 'EXP/min (last 5 min)',
-			expPerMinAvg: 'EXP/min (average)',
 			expPerHour: 'EXP/hour',
 			sessionExp: 'Session EXP',
 			eta: 'Next level in',
@@ -18,7 +17,6 @@
 		},
 		es: {
 			expPerMin: 'EXP/min (últimos 5 min)',
-			expPerMinAvg: 'EXP/min (promedio)',
 			expPerHour: 'EXP/hora',
 			sessionExp: 'EXP de la sesión',
 			eta: 'Siguiente nivel en',
@@ -50,8 +48,22 @@
 			el.textContent = labels[el.dataset.label];
 	}
 
+	const SUFFIXES = [
+		[1e9, 'B'],
+		[1e6, 'M'],
+		[1e3, 'K'],
+	];
+
+	// 999 -> "999", 1000 -> "1K", 1399 -> "1.3K", 2500000 -> "2.5M".
+	// Truncates to one decimal so the value doesn't flicker on every small gain.
 	function number(value) {
-		return Math.round(value).toLocaleString('en-US');
+		const abs = Math.abs(Math.round(value));
+		const sign = value < 0 && abs > 0 ? '-' : '';
+		for (const [size, suffix] of SUFFIXES) {
+			if (abs >= size)
+				return sign + Math.floor((abs / size) * 10) / 10 + suffix;
+		}
+		return sign + abs;
 	}
 
 	function duration(seconds) {
@@ -83,7 +95,6 @@
 		const ready = data.rate_ready;
 		const measuring = labels.measuring;
 		setValue('exp-per-min', ready ? number(data.exp_per_min) : measuring);
-		setValue('exp-per-min-avg', ready ? number(data.exp_per_min_avg) : measuring);
 		setValue('exp-per-hour', ready ? number(data.exp_per_hour) : measuring);
 		setValue('session-exp', data.has_reading ? number(data.session_exp) : '-');
 		setValue('eta', data.eta_seconds !== null ? duration(data.eta_seconds) : data.has_reading ? measuring : '-');

@@ -3,7 +3,7 @@
  *
  * Structure:
  *   #exp-meter               root; class state-ok | state-paused | state-hidden | state-no-video | state-offline
- *     .stat#stat-<id>        one row: exp-per-min, exp-per-min-avg, exp-per-hour, session-exp, eta
+ *     .stat#stat-<id>        one row: exp-per-min, exp-per-hour, session-exp, eta
  *       .stat-label
  *       .stat-value#<id>
  *     .status#status         message shown when not reading (paused, HUD not visible, ...)

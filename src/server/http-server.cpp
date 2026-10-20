@@ -63,7 +63,6 @@ std::string stateJson()
 	json += "\"session_exp\":" + std::to_string(s.session_exp) + ",";
 	json += "\"rate_ready\":" + std::string(s.rate_ready ? "true" : "false") + ",";
 	json += "\"exp_per_min\":" + jsonNumber(s.exp_per_min) + ",";
-	json += "\"exp_per_min_avg\":" + jsonNumber(s.session_exp_per_min) + ",";
 	json += "\"exp_per_hour\":" + jsonNumber(s.exp_per_hour) + ",";
 	json += "\"required_exp\":" + jsonOptional(s.required_exp) + ",";
 	json += "\"eta_seconds\":" + jsonOptional(s.eta_seconds);

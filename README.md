@@ -72,11 +72,11 @@ The plugin:
 
 ### Overlay (Browser Source + CSS)
 - Click **Add to scene** in the dock, or add a Browser Source with the URL `http://127.0.0.1:48620/` by hand. The overlay is served only to your own PC and makes no internet requests.
-- It shows **EXP/min (last 5 min)**, **EXP/min (average)**, **EXP/hour**, **Session EXP** and **Next level in**, and dims itself with a short message while paused or while the HUD is not visible.
+- It shows **EXP/min (last 5 min)**, **EXP/hour**, **Session EXP** and **Next level in**, and dims itself with a short message while paused or while the HUD is not visible.
 - URL options, which can be combined with `&`:
   - `?theme=default` | `maple` | `solid` | `light` | `ocean`. Themes only change colors; size and shape stay the same. `solid` has a fully opaque background. The dock's **Theme** selector sets this for you.
   - `?lang=en` | `es`. The default is the OBS language.
-  - `?hide=exp-per-min-avg,eta` hides stats. The ids are `exp-per-min`, `exp-per-min-avg`, `exp-per-hour`, `session-exp`, `eta`.
+  - `?hide=exp-per-hour,eta` hides stats. The ids are `exp-per-min`, `exp-per-hour`, `session-exp`, `eta`.
 - Every element has a stable id/class (`#exp-meter`, `#stat-<id>`, `.stat-label`, `.stat-value`, `#status`). Colors, font and size are CSS variables (`--em-accent`, `--em-size`, …). Restyle it from the Browser Source's **Custom CSS** field; see [`data/overlay/custom-css-example.css`](data/overlay/custom-css-example.css).
 
 ---
@@ -88,7 +88,7 @@ The plugin:
 | **Reading** | One accepted capture of `(time, exp, percent, level)` from the HUD. A reading is accepted only if:<br>• its confidence is above the threshold,<br>• the same value was read twice in a row,<br>• and its `exp ÷ percent` agrees with the required EXP implied by the previous readings (a misread digit breaks that agreement). A different value that keeps being read consistently (e.g. after switching characters) becomes the new baseline without counting as EXP. |
 | **Measurement** (session) | The time span between Start/Reset and now. All "session" stats refer to the current measurement. |
 | **Session EXP** | Sum of the EXP gained during the measurement, **minus** any EXP lost (for example, on death). |
-| **EXP / min** | EXP gained in the averaging window ÷ active minutes in that window. The session average (session EXP ÷ session minutes) is also available. |
+| **EXP / min** | EXP gained in the averaging window ÷ active minutes in that window. |
 | **Required EXP** | Total EXP needed for the current level, computed only from the HUD: every reading bounds it to `exp ÷ percent` (the percent has 2 decimals), and intersecting those bounds narrows it to within ~0.1%. No level table is needed; it restarts on every level-up. |
 | **Time to level (ETA)** | `(required EXP − current EXP) ÷ EXP per minute`. Shown as `—` until the rate is stable. |
 | **Level-up** | Detected when the level digits increase by one, or when EXP drops and the implied required EXP grows (or the percent wraps from high to low). The EXP crossing the level boundary is counted correctly: `(required_prev − exp_prev) + exp_new`. |
@@ -192,7 +192,7 @@ cmake --install build_x64 --config RelWithDebInfo --prefix "C:/ProgramData/obs-s
 Then start OBS and open **Help → Log Files → View Current Log**. Look for:
 
 ```
-[exp-meter-for-obs] EXP Meter loaded (version 0.1.0)
+[exp-meter-for-obs] EXP Meter loaded (version 0.1.1)
 ```
 
 ### HUD reader CLI and tests
@@ -213,8 +213,8 @@ The installer is built with [Inno Setup](https://jrsoftware.org/isinfo.php) 6 or
 
 ```powershell
 cmake --install build_x64 --config RelWithDebInfo --prefix release/RelWithDebInfo
-iscc /DAppVersion=0.1.0 /DStagingDir=$PWD\release\RelWithDebInfo /DOutputDir=$PWD\release installer\exp-meter-for-obs.iss
-#   release\exp-meter-for-obs-0.1.0-windows-x64-installer.exe
+iscc /DAppVersion=0.1.1 /DStagingDir=$PWD\release\RelWithDebInfo /DOutputDir=$PWD\release installer\exp-meter-for-obs.iss
+#   release\exp-meter-for-obs-0.1.1-windows-x64-installer.exe
 ```
 
 It finds OBS through the registry, warns when OBS is missing or older than 30, asks the user to close OBS while it runs, and offers to open OBS at the end.
