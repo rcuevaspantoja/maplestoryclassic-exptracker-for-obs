@@ -36,4 +36,43 @@ endif()
 
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE src/plugin-main.cpp)
 
+# HUD reading core: plain C++, no OBS dependency, so the CLI and tests can use it too.
+add_library(expmeter-core STATIC)
+target_sources(
+  expmeter-core
+  PRIVATE src/hud/glyph_ocr.cpp src/hud/hud_reader.cpp src/hud/locator.cpp src/hud/parser.cpp
+  PUBLIC
+    src/hud/glyph_ocr.hpp
+    src/hud/glyphs.hpp
+    src/hud/hud_reader.hpp
+    src/hud/image.hpp
+    src/hud/locator.hpp
+    src/hud/parser.hpp
+)
+target_include_directories(expmeter-core PUBLIC src)
+target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE expmeter-core)
+
 set_target_properties_plugin(${CMAKE_PROJECT_NAME} PROPERTIES OUTPUT_NAME ${_name})
+
+option(ENABLE_TESTS "Build the HUD reader CLI and unit tests" ON)
+if(ENABLE_TESTS)
+  enable_testing()
+
+  # Image loading for the CLI and tests (stb_image is third-party code; don't fail on its warnings).
+  add_library(expmeter-imagefile STATIC tools/image_file.cpp tools/image_file.hpp)
+  target_include_directories(expmeter-imagefile PUBLIC tools PRIVATE third_party/stb)
+  target_link_libraries(expmeter-imagefile PUBLIC expmeter-core)
+  set_target_properties(expmeter-imagefile PROPERTIES COMPILE_WARNING_AS_ERROR OFF)
+
+  add_executable(expmeter-cli tools/expmeter-cli.cpp)
+  target_link_libraries(expmeter-cli PRIVATE expmeter-imagefile)
+
+  add_executable(expmeter-tests tests/test_main.cpp tests/test_parser.cpp tests/test_hud_reader.cpp)
+  target_include_directories(expmeter-tests PRIVATE third_party/doctest)
+  target_link_libraries(expmeter-tests PRIVATE expmeter-imagefile)
+  target_compile_definitions(
+    expmeter-tests
+    PRIVATE DOCTEST_CONFIG_USE_STD_HEADERS EXPMETER_REFERENCES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/references"
+  )
+  add_test(NAME expmeter-tests COMMAND expmeter-tests)
+endif()

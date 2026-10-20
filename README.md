@@ -7,7 +7,7 @@ An **OBS Studio** plugin built exclusively for **MapleStory Classic** streamers.
 - **Time to level up**: an estimate based on your current pace
 - **Training-spot comparison**: measure a map, start a new measurement on another map, and see which one pays better
 
-> Status: **Stage 0 – Definition (approved).** This document records the agreed design. Implementation starts at Stage 1. See [Roadmap](#roadmap).
+> Status: **Stage 2 – Offline HUD reading (in review).** The plugin loads in OBS, and the HUD reader works offline (CLI + tests). See [Roadmap](#roadmap).
 
 ---
 
@@ -27,7 +27,7 @@ An **OBS Studio** plugin built exclusively for **MapleStory Classic** streamers.
 MapleStory always draws its HUD in the same place, at the bottom of the window. That HUD shows:
 
 ```
-LV. 39            EXP. 74.660 [28.00%]
+LV. 39            EXP. 74,660 [28.00%]
 ```
 
 The plugin:
@@ -120,12 +120,12 @@ Game Capture ──("EXP Meter" filter)──► HUD reader ──► Stats engi
 | Plugin entry | `src/plugin-main.cpp` | Registers the filter, dock and hotkeys, and starts the server |
 | Frame capture | `src/exp-filter.cpp` | Video filter. It passes the image through untouched. About every 500 ms it renders only the HUD region and copies it to the CPU asynchronously (`gs_texrender` → `gs_stage_texture` → `gs_stagesurface_map`), then hands it to a worker thread |
 | HUD locator | `src/hud/locator.*` | Finds the `EXP.` label template in the bottom of the frame, trying multiple scales, and caches its position |
-| Glyph OCR | `src/hud/glyph_ocr.*` | Binarizes the region, splits it into glyphs, and matches them against templates of the HUD font. There is a white set for the EXP digits and an orange set for the level digits |
+| Glyph OCR | `src/hud/glyph_ocr.*`, `src/hud/glyphs.hpp` | Matches each character against the HUD pixel font, which is embedded in the code as bitmaps extracted from native captures. There is one set for the EXP text and one for the level digits in the orange boxes |
 | Parser | `src/hud/parser.*` | Turns `74.660 [28.00%]` into `exp = 74660, pct = 28.00`. A `.` or `,` before `[` is a thousands separator |
 | Stats engine | `src/stats/` | Pure C++ with no OBS dependency, so it is unit-testable. Handles rates, totals, ETA, level-ups, losses, auto-pause and measurement history |
 | Local server | `src/server/` | cpp-httplib bound to `127.0.0.1`. Routes: `/` (overlay), `/api/state` (JSON), `/events` (SSE), `POST /api/reset` |
 | Dock | `src/ui/exp-dock.*` | Qt6 panel: source selector, status, stats, controls, comparison table |
-| Assets | `data/` | `glyphs/*.png`, `exp_table.json`, `overlay/` (HTML/CSS/JS), `locale/` (`en-US.ini`, `es-ES.ini`) |
+| Assets | `data/` | `exp_table.json`, `overlay/` (HTML/CSS/JS), `locale/` (`en-US.ini`, `es-ES.ini`) |
 | Tests | `tests/` | doctest unit tests: OCR on reference images, the parser, and the stats engine with simulated sequences |
 
 **Tech stack:** C++17, CMake, [obs-plugintemplate](https://github.com/obsproject/obs-plugintemplate), Qt6 (comes with OBS), cpp-httplib, stb_image, doctest. Windows x64 comes first.
@@ -139,8 +139,8 @@ Development is incremental. Each stage ends with something you can check before 
 | Stage | Deliverable | How to check | Status |
 |---|---|---|---|
 | **0. Definition** | This README | Review and approval | ✅ Done |
-| **1. Skeleton** | Template-based project that builds and loads in OBS; locales; CI | OBS log shows `EXP Meter loaded` | 🟡 In review |
-| **2. Offline HUD reading** | Locator + OCR + parser library with tests; `expmeter-cli image.png` | `ctest` passes; the CLI prints `exp=74660 pct=28.00 lv=39` for the reference image | ⚪ |
+| **1. Skeleton** | Template-based project that builds and loads in OBS; locales; CI | OBS log shows `EXP Meter loaded` | ✅ Done |
+| **2. Offline HUD reading** | Locator + OCR + parser library with tests; `expmeter-cli image.png` | `ctest` passes; the CLI prints `exp=74660 pct=28.00 lv=39` for the reference image | 🟡 In review |
 | **3. OBS filter** | Filter captures the HUD region and logs readings | Correct readings in the OBS log, from the reference image or the live game | ⚪ |
 | **4. Stats engine** | Rates, ETA, level-up, loss, auto-pause, with tests | Simulated tests pass; live values look sane | ⚪ |
 | **5. Dock** | Source selector, status, stats, Start/Pause/Reset | Works without adding filters by hand | ⚪ |
@@ -187,20 +187,39 @@ Then start OBS and open **Help → Log Files → View Current Log**. Look for:
 [exp-meter-for-obs] EXP Meter loaded (version 0.1.0)
 ```
 
+### HUD reader CLI and tests
+
+The build also produces a command-line tool and the unit tests. Neither needs OBS:
+
+```powershell
+build_x64\RelWithDebInfo\expmeter-cli.exe references\game-capture.png
+#   exp=74660 pct=28.00 lv=39
+ctest --test-dir build_x64 -C RelWithDebInfo --output-on-failure
+```
+
+The CLI accepts any PNG or BMP screenshot. It is the quickest way to check whether a capture can be read.
+
 CI (GitHub Actions) builds the Windows plugin on every push and uploads it as a build artifact.
 
 ---
 
 ## Contributing HUD samples
 
-The OCR compares each character against the HUD's own pixel font. It needs at least one clean example of every character it reads. Add PNG screenshots to `references/samples/`:
+The OCR compares each character against the HUD's own pixel font, so it needs one clean, **native-scale** example of every character. Add PNG screenshots to `references/samples/`.
 
-- [ ] EXP text containing the digits **1, 3, 5, 9** (we already have 0, 2, 4, 6, 7, 8)
-- [ ] `LV.` with several different levels, so all orange digits 0–9 are covered
-- [ ] The same HUD at different window sizes or resolutions
-- [ ] A screenshot around a level-up and after a death, if possible
+Current coverage:
 
-Use full, uncompressed window captures (PNG, not JPG), and put the visible values in the filename, for example `exp_123456_45.67_lv52.png`. These files also become test fixtures.
+| Font | Have (native) | Missing |
+|---|---|---|
+| EXP digits and symbols (`0-9 , . [ ] %`) | all except 9. The 9 is the 6 rotated 180°, which holds for every other symmetric pair in this font | a native **9** to confirm it |
+| Level digits (white on orange boxes) | 1, 3, 9 | **0, 2, 4, 5, 6, 7, 8**. Until a digit has a template, a level containing it is reported as unknown, never guessed |
+
+Also useful:
+
+- The HUD at other game resolutions
+- Captures around a level-up and after a death
+
+Take captures **at the game's native size**, for example with OBS's *Screenshot (Source)* on the Game Capture. Use PNG, not JPG. Put the visible values in the filename, for example `exp_123456_45.67_lv52.png`. These files also become test fixtures.
 
 ---
 
@@ -212,14 +231,15 @@ Use full, uncompressed window captures (PNG, not JPG), and put the visible value
 ├── src/
 │   ├── plugin-main.cpp
 │   ├── exp-filter.cpp
-│   ├── hud/        (locator, glyph_ocr, parser)
+│   ├── hud/        (locator, glyph_ocr, glyphs, parser, hud_reader)
 │   ├── stats/      (session, history)
 │   ├── server/     (http server)
 │   └── ui/         (exp-dock)
 ├── data/
-│   ├── glyphs/  exp_table.json  overlay/  locale/
+│   ├── exp_table.json  overlay/  locale/
 ├── tests/
-├── tools/          (expmeter-cli)
+├── tools/          (expmeter-cli, image loading)
+├── third_party/    (stb_image, doctest)
 └── references/     (game captures, samples, original spec)
 ```
 
