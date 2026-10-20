@@ -122,13 +122,14 @@ void attachExpFilter(const std::string &name)
 
 // Overlay color themes, in the order shown in the dock: theme id and label key.
 constexpr const char *kThemes[][2] = {
-	{"default", "EXPMeter.Theme.Default"}, {"maple", "EXPMeter.Theme.Maple"}, {"solid", "EXPMeter.Theme.Solid"},
-	{"light", "EXPMeter.Theme.Light"},     {"ocean", "EXPMeter.Theme.Ocean"},
+	{"solid", "EXPMeter.Theme.Solid"}, {"transparent", "EXPMeter.Theme.Transparent"},
+	{"maple", "EXPMeter.Theme.Maple"}, {"light", "EXPMeter.Theme.Light"},
+	{"ocean", "EXPMeter.Theme.Ocean"},
 };
 
 std::string overlayUrlFor(const std::string &theme)
 {
-	return theme == "default" ? overlayUrl() : overlayUrl() + "?theme=" + theme;
+	return theme == "solid" ? overlayUrl() : overlayUrl() + "?theme=" + theme;
 }
 
 // Points an existing overlay Browser Source at the chosen design.

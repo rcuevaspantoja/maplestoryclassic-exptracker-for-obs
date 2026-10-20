@@ -8,7 +8,7 @@ namespace expmeter {
 struct Settings {
 	static constexpr int kDefaultPort = 48620;
 
-	std::string overlay_theme = "default";
+	std::string overlay_theme = "solid";
 	int overlay_port = kDefaultPort;
 };
 

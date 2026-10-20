@@ -8,7 +8,8 @@
  *       .stat-value#<id>
  *     .status#status         message shown when not reading (paused, HUD not visible, ...)
  *
- * The body has a theme class: theme-default | theme-maple | theme-solid | theme-light | theme-ocean.
+ * The body has a theme class: theme-solid | theme-transparent | theme-maple | theme-light | theme-ocean.
+ * The base style below is the transparent theme; the others override its colors.
  */
 
 :root {
@@ -106,6 +107,8 @@ body {
  * Themes only change colors. Size, layout, borders and rounded corners always come from the
  * default style above, so switching themes never moves or resizes the overlay.
  */
+
+/* --- transparent: the base style above, nothing to override --- */
 
 /* --- maple: warm orange, inspired by the game's UI --- */
 .theme-maple #exp-meter {

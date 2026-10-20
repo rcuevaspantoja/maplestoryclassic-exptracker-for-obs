@@ -29,7 +29,7 @@
 
 	const params = new URLSearchParams(window.location.search);
 	const root = document.getElementById('exp-meter');
-	document.body.classList.add('theme-' + (params.get('theme') || 'default'));
+	document.body.classList.add('theme-' + (params.get('theme') || 'solid'));
 	for (const id of (params.get('hide') || '').split(',')) {
 		const stat = id && document.getElementById('stat-' + id.trim());
 		if (stat)

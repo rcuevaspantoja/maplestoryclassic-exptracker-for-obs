@@ -15,7 +15,11 @@ Settings loadSettings()
 		return settings;
 
 	const std::string theme = obs_data_get_string(data, "overlay_theme");
-	if (!theme.empty())
+	// "default" was the translucent theme's id up to 0.1.1, when it was also the default. Overlays
+	// added back then have no ?theme= in their URL, which now means solid, so it maps to solid.
+	if (theme == "default")
+		settings.overlay_theme = "solid";
+	else if (!theme.empty())
 		settings.overlay_theme = theme;
 	const long long port = obs_data_get_int(data, "overlay_port");
 	if (port >= 1024 && port <= 65535)

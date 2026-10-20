@@ -74,7 +74,7 @@ The plugin:
 - Click **Add to scene** in the dock, or add a Browser Source with the URL `http://127.0.0.1:48620/` by hand. The overlay is served only to your own PC and makes no internet requests.
 - It shows **EXP/min (last 5 min)**, **EXP/hour**, **Session EXP** and **Next level in**, and dims itself with a short message while paused or while the HUD is not visible.
 - URL options, which can be combined with `&`:
-  - `?theme=default` | `maple` | `solid` | `light` | `ocean`. Themes only change colors; size and shape stay the same. `solid` has a fully opaque background. The dock's **Theme** selector sets this for you.
+  - `?theme=solid` (default) | `transparent` | `maple` | `light` | `ocean`. Themes only change colors; size and shape stay the same. `solid` has a fully opaque background; `transparent` is a dark, translucent panel. The dock's **Theme** selector sets this for you.
   - `?lang=en` | `es`. The default is the OBS language.
   - `?hide=exp-per-hour,eta` hides stats. The ids are `exp-per-min`, `exp-per-hour`, `session-exp`, `eta`.
 - Every element has a stable id/class (`#exp-meter`, `#stat-<id>`, `.stat-label`, `.stat-value`, `#status`). Colors, font and size are CSS variables (`--em-accent`, `--em-size`, …). Restyle it from the Browser Source's **Custom CSS** field; see [`data/overlay/custom-css-example.css`](data/overlay/custom-css-example.css).
