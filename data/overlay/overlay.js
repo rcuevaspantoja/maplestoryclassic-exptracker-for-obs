@@ -3,6 +3,9 @@
 	'use strict';
 
 	const POLL_MS = 1000;
+	// How often each value is allowed to change, so the numbers don't flicker on every poll.
+	const RATE_REFRESH_MS = 60000;
+	const SESSION_REFRESH_MS = 10000;
 
 	const LABELS = {
 		en: {
@@ -66,20 +69,31 @@
 		return sign + abs;
 	}
 
+	// 4350 -> "1h 13m", 75 -> "2m". Rounds up so it never shows "0m" before the level up.
 	function duration(seconds) {
-		const total = Math.max(0, Math.round(seconds));
-		const h = Math.floor(total / 3600);
-		const m = Math.floor((total % 3600) / 60);
-		const s = total % 60;
-		const mm = String(m).padStart(2, '0');
-		const ss = String(s).padStart(2, '0');
-		return h > 0 ? `${h}:${mm}:${ss}` : `${m}:${ss}`;
+		const total = Math.max(1, Math.ceil(seconds / 60));
+		const h = Math.floor(total / 60);
+		const m = total % 60;
+		return h > 0 ? `${h}h ${String(m).padStart(2, '0')}m` : `${m}m`;
 	}
 
 	function setValue(id, text) {
 		const el = document.getElementById(id);
 		if (el.textContent !== text)
 			el.textContent = text;
+	}
+
+	const lastUpdate = {};
+
+	// Updates the value at most once every `interval` ms, but right away when it
+	// switches between a number and a placeholder ("measuring…", "-").
+	function setThrottled(id, interval, ready, text) {
+		const now = Date.now();
+		const last = lastUpdate[id];
+		if (last && last.ready === ready && now - last.at < interval)
+			return;
+		lastUpdate[id] = { at: now, ready };
+		setValue(id, text);
 	}
 
 	function setState(state, message) {
@@ -94,10 +108,13 @@
 		}
 		const ready = data.rate_ready;
 		const measuring = labels.measuring;
-		setValue('exp-per-min', ready ? number(data.exp_per_min) : measuring);
-		setValue('exp-per-hour', ready ? number(data.exp_per_hour) : measuring);
-		setValue('session-exp', data.has_reading ? number(data.session_exp) : '-');
-		setValue('eta', data.eta_seconds !== null ? duration(data.eta_seconds) : data.has_reading ? measuring : '-');
+		setThrottled('exp-per-min', RATE_REFRESH_MS, ready, ready ? number(data.exp_per_min) : measuring);
+		setThrottled('exp-per-hour', RATE_REFRESH_MS, ready, ready ? number(data.exp_per_hour) : measuring);
+		setThrottled('session-exp', SESSION_REFRESH_MS, data.has_reading,
+			     data.has_reading ? number(data.session_exp) : '-');
+		const hasEta = data.eta_seconds !== null;
+		setThrottled('eta', SESSION_REFRESH_MS, hasEta,
+			     hasEta ? duration(data.eta_seconds) : data.has_reading ? measuring : '-');
 
 		if (data.status === 'no-video')
 			setState('no-video', labels.noVideo);
