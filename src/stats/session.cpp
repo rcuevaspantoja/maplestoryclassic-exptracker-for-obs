@@ -8,7 +8,8 @@ namespace expmeter {
 namespace {
 
 constexpr double kRangeSlack = 1e-4;   // relative tolerance when intersecting ranges
-constexpr int kWrapPercentDrop = 5000; // a 50+ point drop in % is a level-up, not a death
+// A death costs at most ~10% of the level, while a level-up drops from near 100% to near 0%.
+constexpr int kMaxDeathPercentDrop = 2000;
 constexpr double kRequiredMaxUncertainty = 0.02;
 
 RequiredExpRange intersect(const RequiredExpRange &a, const RequiredExpRange &b)
@@ -128,23 +129,14 @@ ReadingEvent Session::accept(const Value &read)
 	const bool level_up_by_digits = levels_known && read.level == prev.level + 1;
 	const bool level_changed_oddly = levels_known && read.level != prev.level && !level_up_by_digits;
 
-	if (!level_up_by_digits && !level_changed_oddly && consistent(required_, range)) {
-		// Same level: a gain, or a loss (death).
-		required_ = intersect(required_, range);
-		current_ = value;
-		jump_.reset();
-		const int64_t delta = value.exp - prev.exp;
-		if (delta == 0)
-			return ReadingEvent::NoChange;
-		record(delta);
-		return delta > 0 ? ReadingEvent::Gain : ReadingEvent::Loss;
-	}
-
-	// EXP fell and the implied level total grew (or the % wrapped): a level-up. With known
-	// level digits that stayed the same, it can't be one.
+	// EXP fell and the implied level total grew, or the % dropped more than a death can take:
+	// a level-up. This is checked first because a reading right after one (e.g. 0 [0.00%])
+	// says little about the new level total and would pass as a death. With known level
+	// digits that stayed the same, it can't be one.
 	const bool same_level_digits = levels_known && read.level == prev.level;
-	const bool wrapped = read.exp < prev.exp && ((required_.bounded() && range.low > required_.high) ||
-						     read.percent_x100 + kWrapPercentDrop < prev.percent_x100);
+	const bool total_grew = required_.bounded() && range.low > required_.high * (1.0 + kRangeSlack);
+	const bool wrapped = read.exp < prev.exp &&
+			     (total_grew || prev.percent_x100 - read.percent_x100 > kMaxDeathPercentDrop);
 	if (level_up_by_digits || (wrapped && !same_level_digits)) {
 		const double to_next = std::max(0.0, required_.estimate() - static_cast<double>(prev.exp));
 		record(std::llround(to_next) + read.exp);
@@ -156,6 +148,18 @@ ReadingEvent Session::accept(const Value &read)
 		required_ = range;
 		jump_.reset();
 		return ReadingEvent::LevelUp;
+	}
+
+	if (!level_changed_oddly && consistent(required_, range)) {
+		// Same level: a gain, or a loss (death).
+		required_ = intersect(required_, range);
+		current_ = value;
+		jump_.reset();
+		const int64_t delta = value.exp - prev.exp;
+		if (delta == 0)
+			return ReadingEvent::NoChange;
+		record(delta);
+		return delta > 0 ? ReadingEvent::Gain : ReadingEvent::Loss;
 	}
 
 	// Anything else is a misread, or a real jump such as a character switch. Count nothing;

@@ -137,6 +137,89 @@ TEST_CASE("a level-up counts the EXP that crossed the level")
 		CHECK(feed(session, 4 * kSecond, 1500, 0, kRequired40) == ReadingEvent::LevelUp);
 		CHECK(session.stats(5 * kSecond).session_exp == doctest::Approx(8229).epsilon(0.001));
 	}
+	SUBCASE("back to 0 [0.00%] while the level digits are unreadable")
+	{
+		Session session;
+		feed(session, 0, 260000);
+		feed(session, 2 * kSecond, 265000);
+		CHECK(feed(session, 4 * kSecond, 0, 0, 0) == ReadingEvent::LevelUp);
+		const SessionStats s = session.stats(5 * kSecond);
+		CHECK(s.level == 40);
+		CHECK(s.level_ups == 1);
+		CHECK(s.losses == 0);
+		CHECK(s.lost_exp == 0);
+		CHECK(s.session_exp == doctest::Approx(5000 + 1729).epsilon(0.001));
+	}
+	SUBCASE("a few EXP into the new level, level digits unknown")
+	{
+		Session session;
+		feed(session, 0, 260000, 0);
+		feed(session, 2 * kSecond, 265000, 0);
+		CHECK(feed(session, 4 * kSecond, 350, 0, kRequired40) == ReadingEvent::LevelUp);
+		CHECK(session.stats(5 * kSecond).losses == 0);
+	}
+	SUBCASE("same level digits rule out a level-up")
+	{
+		Session session;
+		feed(session, 0, 260000);
+		feed(session, 2 * kSecond, 265000);
+		CHECK(feed(session, 4 * kSecond, 0, 0, 39) != ReadingEvent::LevelUp);
+		CHECK(session.stats(5 * kSecond).level_ups == 0);
+	}
+}
+
+TEST_CASE("a death bigger than usual with unknown level digits is still a loss")
+{
+	Session session;
+	feed(session, 0, 100000, 0);
+	CHECK(feed(session, 2 * kSecond, 60000, 0) == ReadingEvent::Loss); // ~15 points
+	const SessionStats s = session.stats(3 * kSecond);
+	CHECK(s.losses == 1);
+	CHECK(s.level_ups == 0);
+}
+
+TEST_CASE("stats carry on across a level-up")
+{
+	// 100 EXP every 2 seconds (3,000 EXP/min): 10 minutes to finish level 39, which shows
+	// 0 [0.00%] with unreadable level digits right after, then 5 minutes on level 40.
+	constexpr double kRequired40 = 297000.0;
+	constexpr int64_t kRequired39Exp = static_cast<int64_t>(kRequired39);
+	Session session;
+	int64_t total = kRequired39Exp - 30000;
+	int64_t t = 0;
+	feed(session, t, total);
+	int64_t exp = 0;
+	for (int i = 0; i < 450; ++i) {
+		t += 2 * kSecond;
+		total += 100;
+		CAPTURE(total);
+		ReadingEvent e;
+		if (total < kRequired39Exp) {
+			e = feed(session, t, total);
+		} else {
+			exp = total - kRequired39Exp;
+			e = exp == 0 ? feed(session, t, 0, 0, 0) : feed(session, t, exp, 40, kRequired40);
+			if (exp == 0)
+				CHECK(e == ReadingEvent::LevelUp);
+		}
+		CHECK(e != ReadingEvent::Loss);
+		CHECK(e != ReadingEvent::Rejected);
+	}
+
+	const SessionStats s = session.stats(t + kReadInterval);
+	CHECK(s.level == 40);
+	CHECK(s.exp == exp);
+	CHECK(s.level_ups == 1);
+	CHECK(s.losses == 0);
+	CHECK(s.lost_exp == 0);
+	CHECK(s.session_exp == doctest::Approx(45000).epsilon(0.001));
+	CHECK(s.exp_per_min == doctest::Approx(3000).epsilon(0.02));
+	CHECK(s.session_exp_per_min == doctest::Approx(3000).epsilon(0.02));
+	// The level total and the time to level are those of level 40 now.
+	REQUIRE(s.required_exp);
+	CHECK(*s.required_exp == doctest::Approx(kRequired40).epsilon(0.002));
+	REQUIRE(s.eta_seconds);
+	CHECK(*s.eta_seconds == doctest::Approx((kRequired40 - exp) / 3000.0 * 60.0).epsilon(0.02));
 }
 
 TEST_CASE("an unknown level on some frames does not block confirmation")
